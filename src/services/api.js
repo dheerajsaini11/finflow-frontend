@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const API = axios.create({
-  baseURL: 'http://finflow-backend-production-eb28.up.railway.app/api',
+  baseURL: 'https://finflow-backend-production-eb28.up.railway.app/api',
 });
 
 // Automatically attach token to every request

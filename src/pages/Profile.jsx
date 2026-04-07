@@ -55,7 +55,7 @@ export default function Profile() {
     try {
       const token = localStorage.getItem('finflow_token');
       await axios.put(
-        'http://finflow-backend-production-eb28.up.railway.app/api/auth/change-password',
+        'https://finflow-backend-production-eb28.up.railway.app/api/auth/change-password',
         { currentPassword, newPassword },
         { headers: { Authorization: `Bearer ${token}` } }
       );
