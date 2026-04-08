@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getYearlyAnalytics } from '../services/api';
+import { getYearlyAnalytics, getTransactions } from '../services/api';
 import toast from 'react-hot-toast';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
@@ -11,6 +11,7 @@ const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov
 
 export default function Analytics() {
   const [data, setData] = useState(null);
+  const [monthTxs, setMonthTxs] = useState([]);
   const [year, setYear] = useState(new Date().getFullYear());
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [loading, setLoading] = useState(true);
@@ -22,8 +23,20 @@ export default function Analytics() {
   const fetchAnalytics = async () => {
     setLoading(true);
     try {
-      const res = await getYearlyAnalytics({ year, month });
-      setData(res.data);
+      const lastDay = new Date(year, month, 0).getDate();
+      
+      // Fetch analytics AND the raw transactions for the selected month simultaneously
+      const [analyticsRes, txsRes] = await Promise.all([
+        getYearlyAnalytics({ year, month }),
+        getTransactions({
+          start_date: `${year}-${String(month).padStart(2, '0')}-01`,
+          end_date: `${year}-${String(month).padStart(2, '0')}-${lastDay}`,
+          limit: 1000
+        })
+      ]);
+
+      setData(analyticsRes.data);
+      setMonthTxs(txsRes.data.transactions || []);
     } catch (err) {
       toast.error('Failed to load analytics');
     } finally {
@@ -62,7 +75,6 @@ export default function Analytics() {
     return '#ffcdd2';
   };
 
-  // Generate all days of year for heatmap
   const generateYearDays = () => {
     const days = [];
     for (let m = 0; m < 12; m++) {
@@ -74,6 +86,27 @@ export default function Analytics() {
     }
     return days;
   };
+
+  // --- NEW CALCULATIONS: Peak Spend & Heavyweight Category ---
+  
+  // 1. Calculate Heavyweight Category
+  let heavyweight = null;
+  let heavyweightPct = 0;
+  if (data?.categoryBreakdown?.length > 0) {
+    const sorted = [...data.categoryBreakdown].sort((a, b) => Number(b.total) - Number(a.total));
+    heavyweight = sorted[0];
+    const totalExpense = sorted.reduce((sum, c) => sum + Number(c.total), 0);
+    heavyweightPct = totalExpense > 0 ? ((Number(heavyweight.total) / totalExpense) * 100).toFixed(0) : 0;
+  }
+
+  // 2. Calculate Single Peak Spend
+  let peakSpend = null;
+  if (monthTxs?.length > 0) {
+    const expenses = monthTxs.filter(t => t.type === 'expense');
+    if (expenses.length > 0) {
+      peakSpend = expenses.reduce((max, tx) => Number(tx.amount) > Number(max.amount) ? tx : max, expenses[0]);
+    }
+  }
 
   if (loading) {
     return (
@@ -116,6 +149,37 @@ export default function Analytics() {
             <Line type="monotone" dataKey="Investment" stroke="#6c5ce7" strokeWidth={2} dot={false} />
           </LineChart>
         </ResponsiveContainer>
+      </div>
+
+      {/* --- NEW: Insights Row --- */}
+      <div style={styles.insightsRow}>
+        
+        {/* Single Peak Spend Card */}
+        <div style={styles.insightCard}>
+          <div style={styles.insightIconOrange}>💼</div>
+          <div style={styles.insightLabel}>SINGLE PEAK SPEND</div>
+          <div style={styles.insightValue}>
+            {peakSpend ? formatAmount(peakSpend.amount) : '₹0'}
+          </div>
+          <div style={styles.insightSubtext}>
+            {peakSpend 
+              ? `${peakSpend.category_name || 'Expense'} - ${new Date(peakSpend.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}` 
+              : 'No expenses this month'}
+          </div>
+        </div>
+
+        {/* Heavyweight Category Card */}
+        <div style={styles.insightCard}>
+          <div style={styles.insightIconBlue}>🏠</div>
+          <div style={styles.insightLabel}>HEAVYWEIGHT CATEGORY</div>
+          <div style={styles.insightValue}>
+            {heavyweight ? heavyweight.name : '-'}
+          </div>
+          <div style={styles.insightSubtext}>
+            {heavyweightPct}% of Total Outflow
+          </div>
+        </div>
+
       </div>
 
       {/* Month Selector for Pie */}
@@ -220,13 +284,13 @@ export default function Analytics() {
         </ResponsiveContainer>
       </div>
 
-      <div style={{ height: '20px' }} />
+      <div style={{ height: '80px' }} /> {/* Padding for bottom nav */}
     </div>
   );
 }
 
 const styles = {
-  container: { padding: '20px', background: '#0a0e1a', minHeight: '100vh' },
+  container: { padding: '20px', background: '#0a0e1a', minHeight: '100vh', paddingBottom: '80px' },
   loading: { display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0a0e1a', color: '#00f5a0' },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingTop: '10px' },
   title: { fontSize: '24px', fontWeight: '700', color: '#fff' },
@@ -234,6 +298,16 @@ const styles = {
   card: { background: '#1a1f35', borderRadius: '16px', padding: '20px', marginBottom: '16px', border: '1px solid #2a2f45' },
   cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' },
   cardTitle: { fontSize: '16px', fontWeight: '700', color: '#fff', marginBottom: '16px' },
+  
+  // --- NEW INSIGHT CARD STYLES ---
+  insightsRow: { display: 'flex', gap: '16px', marginBottom: '16px' },
+  insightCard: { flex: 1, background: '#1a1f35', borderRadius: '16px', padding: '20px', border: '1px solid #2a2f45', display: 'flex', flexDirection: 'column' },
+  insightIconOrange: { width: '32px', height: '32px', background: '#ffa50222', color: '#ffa502', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', marginBottom: '12px' },
+  insightIconBlue: { width: '32px', height: '32px', background: '#0066ff22', color: '#0066ff', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', marginBottom: '12px' },
+  insightLabel: { fontSize: '10px', fontWeight: '800', color: '#8892b0', letterSpacing: '0.5px', marginBottom: '8px' },
+  insightValue: { fontSize: '22px', fontWeight: '700', color: '#fff', marginBottom: '4px' },
+  insightSubtext: { fontSize: '12px', color: '#8892b0' },
+
   monthSelect: { background: '#0a0e1a', border: '1px solid #2a2f45', color: '#fff', padding: '6px 10px', borderRadius: '8px', fontSize: '13px', outline: 'none' },
   empty: { color: '#8892b0', textAlign: 'center', padding: '20px' },
   pieContainer: { display: 'flex', alignItems: 'center' },
