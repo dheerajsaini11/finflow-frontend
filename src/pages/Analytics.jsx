@@ -59,39 +59,11 @@ export default function Analytics() {
     color: c.color || '#6c5ce7',
   })) || [];
 
-  // --- Yearly Heatmap Logic (Bottom Card) ---
-  const heatmapData = {};
-  data?.heatmap?.forEach(h => {
-    heatmapData[h.day] = Number(h.total);
-  });
-  const maxHeat = Math.max(...Object.values(heatmapData), 1);
-  const getHeatColor = (val) => {
-    if (!val) return '#2a2f45';
-    const intensity = val / maxHeat;
-    if (intensity > 0.75) return '#ff4757';
-    if (intensity > 0.5) return '#ff6b81';
-    if (intensity > 0.25) return '#ff9f9f';
-    return '#ffcdd2';
-  };
-
-  const generateYearDays = () => {
-    const days = [];
-    for (let m = 0; m < 12; m++) {
-      const daysInMonth = new Date(year, m + 1, 0).getDate();
-      for (let d = 1; d <= daysInMonth; d++) {
-        const dateStr = `${year}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-        days.push(dateStr);
-      }
-    }
-    return days;
-  };
-
-  // --- NEW: Local Monthly Heatmap Logic (For the Calendar) ---
+  // Local Monthly Heatmap Logic (For the Calendar)
   const monthlyHeatmapData = {};
   if (monthTxs?.length > 0) {
     monthTxs.forEach(tx => {
       if (tx.type === 'expense') {
-        // Robust extraction to guarantee YYYY-MM-DD format match
         const dateStr = tx.date.split('T')[0].substring(0, 10);
         monthlyHeatmapData[dateStr] = (monthlyHeatmapData[dateStr] || 0) + Number(tx.amount);
       }
@@ -207,7 +179,7 @@ export default function Analytics() {
         </div>
       </div>
 
-      {/* --- MERGED CARD: Category Breakdown + Monthly Calendar Heatmap --- */}
+      {/* MERGED CARD: Category Breakdown + Monthly Calendar Heatmap */}
       <div style={styles.card}>
         <div style={styles.cardHeader}>
           <div style={styles.cardTitle}>Monthly Insights</div>
@@ -287,30 +259,6 @@ export default function Analytics() {
         </div>
       </div>
 
-      {/* Yearly Spending Heatmap (Original) */}
-      <div style={styles.card}>
-        <div style={styles.cardTitle}>Yearly Spending Heatmap</div>
-        <div style={styles.heatmapScroll}>
-          <div style={styles.heatmap}>
-            {generateYearDays().map((day, i) => (
-              <div
-                key={i}
-                title={`${day}: ${heatmapData[day] ? formatAmount(heatmapData[day]) : 'No spend'}`}
-                style={{
-                  ...styles.heatCell,
-                  background: getHeatColor(heatmapData[day]),
-                }}
-              />
-            ))}
-          </div>
-          <div style={styles.heatMonths}>
-            {MONTHS.map(m => (
-              <span key={m} style={styles.heatMonth}>{m}</span>
-            ))}
-          </div>
-        </div>
-      </div>
-
       {/* Compare Bar Chart */}
       <div style={styles.card}>
         <div style={styles.cardTitle}>Monthly Comparison</div>
@@ -359,7 +307,7 @@ const styles = {
   monthSelect: { background: '#0a0e1a', border: '1px solid #2a2f45', color: '#fff', padding: '6px 10px', borderRadius: '8px', fontSize: '13px', outline: 'none' },
   empty: { color: '#8892b0', textAlign: 'center', padding: '20px', width: '100%' },
   
-  // --- Merged Card Layout Styles ---
+  // Merged Card Layout Styles
   mergedCardContent: { display: 'flex', flexWrap: 'wrap', gap: '40px', alignItems: 'center' },
   pieSection: { flex: 1, minWidth: '280px', display: 'flex', alignItems: 'center' },
   
@@ -369,7 +317,7 @@ const styles = {
   legendName: { fontSize: '12px', color: '#fff', flex: 1 },
   legendPct: { fontSize: '12px', color: '#8892b0', fontWeight: '600' },
 
-  // --- Calendar Heatmap Styles ---
+  // Calendar Heatmap Styles
   calendarContainer: { flex: 1, minWidth: '280px', display: 'flex', flexDirection: 'column', background: '#0a0e1a', padding: '16px', borderRadius: '12px', border: '1px solid #2a2f45' },
   calendarSubTitle: { fontSize: '12px', fontWeight: '700', color: '#8892b0', marginBottom: '12px', textAlign: 'center', letterSpacing: '0.5px' },
   calendarHeaderRow: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', marginBottom: '8px', textAlign: 'center' },
@@ -377,11 +325,4 @@ const styles = {
   calendarGrid: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' },
   calendarCell: { aspectRatio: '1', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '700', cursor: 'pointer', border: '1px solid #2a2f45' },
   calendarCellEmpty: { aspectRatio: '1', background: 'transparent' },
-
-  // --- Yearly Heatmap Styles ---
-  heatmapScroll: { overflowX: 'auto' },
-  heatmap: { display: 'grid', gridTemplateRows: 'repeat(7, 12px)', gridAutoFlow: 'column', gap: '3px', marginBottom: '16px', paddingBottom: '8px', minWidth: 'max-content' },
-  heatCell: { width: '12px', height: '12px', borderRadius: '2px' },
-  heatMonths: { display: 'flex', justifyContent: 'space-between', minWidth: '400px' },
-  heatMonth: { fontSize: '10px', color: '#8892b0' },
 };
