@@ -8,6 +8,7 @@ import {
 } from 'recharts';
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 export default function Analytics() {
   const [data, setData] = useState(null);
@@ -25,7 +26,6 @@ export default function Analytics() {
     try {
       const lastDay = new Date(year, month, 0).getDate();
       
-      // Fetch analytics AND the raw transactions for the selected month simultaneously
       const [analyticsRes, txsRes] = await Promise.all([
         getYearlyAnalytics({ year, month }),
         getTransactions({
@@ -75,21 +75,20 @@ export default function Analytics() {
     return '#ffcdd2';
   };
 
-  const generateYearDays = () => {
-    const days = [];
-    for (let m = 0; m < 12; m++) {
-      const daysInMonth = new Date(year, m + 1, 0).getDate();
-      for (let d = 1; d <= daysInMonth; d++) {
-        const dateStr = `${year}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-        days.push(dateStr);
-      }
-    }
-    return days;
+  // --- NEW: Monthly Calendar Heatmap Logic ---
+  const getMonthlyCalendar = () => {
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const firstDay = new Date(year, month - 1, 1).getDay(); // 0 = Sun, 6 = Sat
+
+    const blanks = Array(firstDay).fill(null);
+    const days = Array.from({ length: daysInMonth }, (_, i) => {
+      return `${year}-${String(month).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`;
+    });
+
+    return [...blanks, ...days];
   };
 
-  // --- NEW CALCULATIONS: Peak Spend & Heavyweight Category ---
-  
-  // 1. Calculate Heavyweight Category
+  // Calculations: Peak Spend & Heavyweight
   let heavyweight = null;
   let heavyweightPct = 0;
   if (data?.categoryBreakdown?.length > 0) {
@@ -99,7 +98,6 @@ export default function Analytics() {
     heavyweightPct = totalExpense > 0 ? ((Number(heavyweight.total) / totalExpense) * 100).toFixed(0) : 0;
   }
 
-  // 2. Calculate Single Peak Spend
   let peakSpend = null;
   if (monthTxs?.length > 0) {
     const expenses = monthTxs.filter(t => t.type === 'expense');
@@ -151,10 +149,8 @@ export default function Analytics() {
         </ResponsiveContainer>
       </div>
 
-      {/* --- NEW: Insights Row --- */}
+      {/* Insights Row */}
       <div style={styles.insightsRow}>
-        
-        {/* Single Peak Spend Card */}
         <div style={styles.insightCard}>
           <div style={styles.insightIconOrange}>💼</div>
           <div style={styles.insightLabel}>SINGLE PEAK SPEND</div>
@@ -168,7 +164,6 @@ export default function Analytics() {
           </div>
         </div>
 
-        {/* Heavyweight Category Card */}
         <div style={styles.insightCard}>
           <div style={styles.insightIconBlue}>🏠</div>
           <div style={styles.insightLabel}>HEAVYWEIGHT CATEGORY</div>
@@ -179,13 +174,12 @@ export default function Analytics() {
             {heavyweightPct}% of Total Outflow
           </div>
         </div>
-
       </div>
 
-      {/* Month Selector for Pie */}
+      {/* --- MERGED CARD: Category Breakdown + Monthly Calendar Heatmap --- */}
       <div style={styles.card}>
         <div style={styles.cardHeader}>
-          <div style={styles.cardTitle}>Category Breakdown</div>
+          <div style={styles.cardTitle}>Monthly Insights</div>
           <select
             value={month}
             onChange={e => setMonth(Number(e.target.value))}
@@ -197,67 +191,67 @@ export default function Analytics() {
           </select>
         </div>
 
-        {pieData.length === 0 ? (
-          <div style={styles.empty}>No expense data for this month</div>
-        ) : (
-          <div style={styles.pieContainer}>
-            <ResponsiveContainer width="50%" height={180}>
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={50}
-                  outerRadius={80}
-                  dataKey="value"
-                >
-                  {pieData.map((entry, i) => (
-                    <Cell key={i} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  formatter={(val) => formatAmount(val)}
-                  contentStyle={{ background: '#1a1f35', border: '1px solid #2a2f45', borderRadius: '8px' }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-            <div style={styles.legend}>
-              {pieData.map((item, i) => {
-                const total = pieData.reduce((s, p) => s + p.value, 0);
-                const pct = total > 0 ? ((item.value / total) * 100).toFixed(1) : 0;
+        <div style={styles.mergedCardContent}>
+          {/* Left/Top: Pie Chart */}
+          <div style={styles.pieSection}>
+            {pieData.length === 0 ? (
+              <div style={styles.empty}>No expense data for this month</div>
+            ) : (
+              <>
+                <ResponsiveContainer width="50%" height={180}>
+                  <PieChart>
+                    <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value">
+                      {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                    </Pie>
+                    <Tooltip formatter={(val) => formatAmount(val)} contentStyle={{ background: '#1a1f35', border: '1px solid #2a2f45', borderRadius: '8px' }} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div style={styles.legend}>
+                  {pieData.map((item, i) => {
+                    const total = pieData.reduce((s, p) => s + p.value, 0);
+                    const pct = total > 0 ? ((item.value / total) * 100).toFixed(1) : 0;
+                    return (
+                      <div key={i} style={styles.legendItem}>
+                        <div style={{ ...styles.legendDot, background: item.color }} />
+                        <span style={styles.legendName}>{item.name}</span>
+                        <span style={styles.legendPct}>{pct}%</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Right/Bottom: Monthly Calendar Heatmap */}
+          <div style={styles.calendarContainer}>
+            <div style={styles.calendarSubTitle}>Spending Intensity</div>
+            <div style={styles.calendarHeaderRow}>
+              {WEEKDAYS.map((day, i) => (
+                <div key={i} style={styles.calendarDayLabel}>{day}</div>
+              ))}
+            </div>
+            <div style={styles.calendarGrid}>
+              {getMonthlyCalendar().map((dayStr, i) => {
+                if (!dayStr) return <div key={i} style={styles.calendarCellEmpty} />;
+                const dayNum = parseInt(dayStr.split('-')[2]);
+                const spend = heatmapData[dayStr];
+                
                 return (
-                  <div key={i} style={styles.legendItem}>
-                    <div style={{ ...styles.legendDot, background: item.color }} />
-                    <span style={styles.legendName}>{item.name}</span>
-                    <span style={styles.legendPct}>{pct}%</span>
+                  <div
+                    key={i}
+                    title={`${dayStr}: ${spend ? formatAmount(spend) : 'No spend'}`}
+                    style={{
+                      ...styles.calendarCell,
+                      background: getHeatColor(spend),
+                      color: spend ? '#fff' : '#8892b0'
+                    }}
+                  >
+                    {dayNum}
                   </div>
                 );
               })}
             </div>
-          </div>
-        )}
-      </div>
-
-      {/* Spending Heatmap */}
-      <div style={styles.card}>
-        <div style={styles.cardTitle}>Spending Heatmap</div>
-        <div style={styles.heatmapScroll}>
-          <div style={styles.heatmap}>
-            {generateYearDays().map((day, i) => (
-              <div
-                key={i}
-                title={`${day}: ${heatmapData[day] ? formatAmount(heatmapData[day]) : 'No spend'}`}
-                style={{
-                  ...styles.heatCell,
-                  background: getHeatColor(heatmapData[day]),
-                }}
-              />
-            ))}
-          </div>
-          <div style={styles.heatMonths}>
-            {MONTHS.map(m => (
-              <span key={m} style={styles.heatMonth}>{m}</span>
-            ))}
           </div>
         </div>
       </div>
@@ -284,7 +278,7 @@ export default function Analytics() {
         </ResponsiveContainer>
       </div>
 
-      <div style={{ height: '80px' }} /> {/* Padding for bottom nav */}
+      <div style={{ height: '80px' }} />
     </div>
   );
 }
@@ -297,9 +291,8 @@ const styles = {
   yearSelect: { background: '#1a1f35', border: '1px solid #2a2f45', color: '#fff', padding: '8px 12px', borderRadius: '10px', fontSize: '14px', outline: 'none' },
   card: { background: '#1a1f35', borderRadius: '16px', padding: '20px', marginBottom: '16px', border: '1px solid #2a2f45' },
   cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' },
-  cardTitle: { fontSize: '16px', fontWeight: '700', color: '#fff', marginBottom: '16px' },
+  cardTitle: { fontSize: '16px', fontWeight: '700', color: '#fff', marginBottom: '8px' },
   
-  // --- NEW INSIGHT CARD STYLES ---
   insightsRow: { display: 'flex', gap: '16px', marginBottom: '16px' },
   insightCard: { flex: 1, background: '#1a1f35', borderRadius: '16px', padding: '20px', border: '1px solid #2a2f45', display: 'flex', flexDirection: 'column' },
   insightIconOrange: { width: '32px', height: '32px', background: '#ffa50222', color: '#ffa502', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', marginBottom: '12px' },
@@ -309,16 +302,24 @@ const styles = {
   insightSubtext: { fontSize: '12px', color: '#8892b0' },
 
   monthSelect: { background: '#0a0e1a', border: '1px solid #2a2f45', color: '#fff', padding: '6px 10px', borderRadius: '8px', fontSize: '13px', outline: 'none' },
-  empty: { color: '#8892b0', textAlign: 'center', padding: '20px' },
-  pieContainer: { display: 'flex', alignItems: 'center' },
+  empty: { color: '#8892b0', textAlign: 'center', padding: '20px', width: '100%' },
+  
+  // --- NEW: Merged Card Layout Styles ---
+  mergedCardContent: { display: 'flex', flexWrap: 'wrap', gap: '40px', alignItems: 'center' },
+  pieSection: { flex: 1, minWidth: '280px', display: 'flex', alignItems: 'center' },
+  
   legend: { flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' },
   legendItem: { display: 'flex', alignItems: 'center', gap: '8px' },
   legendDot: { width: '10px', height: '10px', borderRadius: '50%', flexShrink: 0 },
   legendName: { fontSize: '12px', color: '#fff', flex: 1 },
   legendPct: { fontSize: '12px', color: '#8892b0', fontWeight: '600' },
-  heatmapScroll: { overflowX: 'auto' },
-  heatmap: { display: 'grid', gridTemplateRows: 'repeat(7, 12px)', gridAutoFlow: 'column', gap: '3px', marginBottom: '16px', paddingBottom: '8px', minWidth: 'max-content' },
-  heatCell: { width: '12px', height: '12px', borderRadius: '2px' },
-  heatMonths: { display: 'flex', justifyContent: 'space-between', minWidth: '400px' },
-  heatMonth: { fontSize: '10px', color: '#8892b0' },
+
+  // --- NEW: Calendar Heatmap Styles ---
+  calendarContainer: { flex: 1, minWidth: '280px', display: 'flex', flexDirection: 'column', background: '#0a0e1a', padding: '16px', borderRadius: '12px', border: '1px solid #2a2f45' },
+  calendarSubTitle: { fontSize: '12px', fontWeight: '700', color: '#8892b0', marginBottom: '12px', textAlign: 'center', letterSpacing: '0.5px' },
+  calendarHeaderRow: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', marginBottom: '8px', textAlign: 'center' },
+  calendarDayLabel: { fontSize: '10px', color: '#8892b0', fontWeight: '700' },
+  calendarGrid: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' },
+  calendarCell: { aspectRatio: '1', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '700', cursor: 'pointer', border: '1px solid #2a2f45' },
+  calendarCellEmpty: { aspectRatio: '1', background: 'transparent' },
 };
