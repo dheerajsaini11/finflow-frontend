@@ -67,7 +67,7 @@ export default function Analytics() {
   const maxHeat = Math.max(...Object.values(heatmapData), 1);
 
   const getHeatColor = (val) => {
-    if (!val) return '#1a1f35';
+    if (!val) return '#2a2f45';
     const intensity = val / maxHeat;
     if (intensity > 0.75) return '#ff4757';
     if (intensity > 0.5) return '#ff6b81';
@@ -317,7 +317,7 @@ const styles = {
   legendName: { fontSize: '12px', color: '#fff', flex: 1 },
   legendPct: { fontSize: '12px', color: '#8892b0', fontWeight: '600' },
   heatmapScroll: { overflowX: 'auto' },
-  heatmap: { display: 'grid', gridTemplateColumns: 'repeat(30, 12px)', gridAutoRows: '12px', gap: '2px', marginBottom: '8px', minWidth: '400px' },
+  heatmap: { display: 'grid', gridTemplateRows: 'repeat(7, 12px)', gridAutoFlow: 'column', gap: '3px', marginBottom: '16px', paddingBottom: '8px', minWidth: 'max-content' },
   heatCell: { width: '12px', height: '12px', borderRadius: '2px' },
   heatMonths: { display: 'flex', justifyContent: 'space-between', minWidth: '400px' },
   heatMonth: { fontSize: '10px', color: '#8892b0' },
