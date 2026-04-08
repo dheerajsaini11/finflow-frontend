@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { getTransactions, getMonthlySummary } from '../services/api';
 import toast from 'react-hot-toast';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -62,7 +62,7 @@ export default function ExportCenter() {
     } catch (err) { toast.error('Export failed'); } finally { setLoading(''); }
   };
 
-  const exportMonthlySummaryCSV = async () => { /* Kept standard for CSV fallback if needed */
+  const exportMonthlySummaryCSV = async () => {
     setLoading('summary_csv');
     try {
       const res = await getMonthlySummary({ month, year });
@@ -78,13 +78,86 @@ export default function ExportCenter() {
     } catch (err) { toast.error('Export failed'); } finally { setLoading(''); }
   };
 
+  const exportYearlyCSV = async () => {
+    setLoading('yearly_csv');
+    try {
+      const res = await getTransactions({
+        start_date: `${year}-01-01`,
+        end_date: `${year}-12-31`,
+        limit: 5000,
+      });
+
+      const txs = res.data.transactions;
+      if (txs.length === 0) {
+        toast.error('No transactions found for this year');
+        return;
+      }
+
+      const headers = ['Date', 'Type', 'Category', 'Amount', 'Note', 'Person'];
+      const rows = txs.map(tx => [
+        new Date(tx.date).toLocaleDateString('en-IN'),
+        tx.type,
+        tx.category_name || '',
+        tx.amount,
+        tx.note || '',
+        tx.person_name || '',
+      ]);
+
+      const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+      downloadCSV(csv, `FinFlow_Yearly_${year}.csv`);
+      toast.success('Yearly CSV downloaded ✅');
+    } catch (err) {
+      toast.error('Export failed');
+    } finally {
+      setLoading('');
+    }
+  };
+
+  const exportCustomCSV = async () => {
+    if (!startDate || !endDate) {
+      toast.error('Please select both start and end dates');
+      return;
+    }
+    setLoading('custom_csv');
+    try {
+      const res = await getTransactions({
+        start_date: startDate,
+        end_date: endDate,
+        limit: 5000,
+      });
+
+      const txs = res.data.transactions;
+      if (txs.length === 0) {
+        toast.error('No transactions found for this range');
+        return;
+      }
+
+      const headers = ['Date', 'Type', 'Category', 'Amount', 'Note', 'Person'];
+      const rows = txs.map(tx => [
+        new Date(tx.date).toLocaleDateString('en-IN'),
+        tx.type,
+        tx.category_name || '',
+        tx.amount,
+        tx.note || '',
+        tx.person_name || '',
+      ]);
+
+      const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+      downloadCSV(csv, `FinFlow_${startDate}_to_${endDate}.csv`);
+      toast.success('Custom CSV downloaded ✅');
+    } catch (err) {
+      toast.error('Export failed');
+    } finally {
+      setLoading('');
+    }
+  };
+
   // --- PREMIUM RICH PDF EXPORT ---
   const exportPremiumPDF = async () => {
     setLoading('premium_pdf');
     try {
       const lastDay = new Date(year, month, 0).getDate();
       
-      // 1. Fetch both Summary and Transactions
       const [sumRes, txRes] = await Promise.all([
         getMonthlySummary({ month, year }),
         getTransactions({
@@ -101,7 +174,6 @@ export default function ExportCenter() {
         return;
       }
 
-      // 2. Calculate Chart Data (Expenses by Category)
       const expenseTxs = txs.filter(t => t.type === 'expense');
       const categoryMap = {};
       expenseTxs.forEach(tx => {
@@ -112,10 +184,8 @@ export default function ExportCenter() {
         name: key, value: categoryMap[key]
       })).sort((a, b) => b.value - a.value);
 
-      // 3. Find Top 5 Transactions
       const topTxs = [...txs].sort((a, b) => Number(b.amount) - Number(a.amount)).slice(0, 5);
 
-      // 4. Set state to trigger hidden render
       setPdfData({
         summary: sumRes.data.summary,
         chartData,
@@ -124,7 +194,6 @@ export default function ExportCenter() {
         year
       });
 
-      // 5. Wait for React to render the hidden DOM and Recharts to draw
       setTimeout(async () => {
         if (!reportRef.current) return;
         
@@ -141,9 +210,9 @@ export default function ExportCenter() {
         pdf.save(`FinFlow_Premium_Report_${MONTHS[month-1]}_${year}.pdf`);
         
         toast.success('Premium PDF Downloaded! ✨', { id: 'pdf_toast' });
-        setPdfData(null); // Clear hidden DOM
+        setPdfData(null); 
         setLoading('');
-      }, 1500); // 1.5s delay to ensure chart renders completely
+      }, 1500); 
 
     } catch (err) {
       toast.error('Failed to generate PDF');
@@ -192,11 +261,10 @@ export default function ExportCenter() {
         </button>
       </div>
 
-      {/* HIDDEN REPORT DOM FOR HTML2CANVAS (Only renders during generation) */}
+      {/* HIDDEN REPORT DOM FOR HTML2CANVAS */}
       {pdfData && (
         <div style={styles.hiddenWrapper}>
           <div ref={reportRef} style={styles.pdfDocument}>
-            
             <div style={styles.pdfHeader}>
               <h1 style={{ margin: 0, fontSize: '32px', color: '#0a0e1a' }}>FinFlow</h1>
               <p style={{ margin: 0, fontSize: '16px', color: '#8892b0' }}>
@@ -222,7 +290,6 @@ export default function ExportCenter() {
             <h3 style={styles.pdfSectionTitle}>Expense Breakdown</h3>
             <div style={{ width: '100%', height: '300px', marginBottom: '40px' }}>
               <ResponsiveContainer width="100%" height="100%">
-                {/* isAnimationActive={false} is REQUIRED for html2canvas to capture the chart properly */}
                 <PieChart>
                   <Pie
                     data={pdfData.chartData}
@@ -286,6 +353,57 @@ export default function ExportCenter() {
         </div>
       </div>
 
+      {/* Yearly Export */}
+      <div style={styles.sectionTitle}>Yearly Report</div>
+      <div style={styles.exportCard}>
+        <div style={styles.exportLeft}>
+          <div style={styles.exportIcon}>📅</div>
+          <div>
+            <div style={styles.exportTitle}>Full Year {year}</div>
+            <div style={styles.exportDesc}>All transactions for the entire year</div>
+          </div>
+        </div>
+        <button
+          onClick={exportYearlyCSV}
+          disabled={loading === 'yearly_csv'}
+          style={styles.exportBtn}
+        >
+          {loading === 'yearly_csv' ? '...' : '⬇️ CSV'}
+        </button>
+      </div>
+
+      {/* Custom Range */}
+      <div style={styles.sectionTitle}>Custom Date Range</div>
+      <div style={styles.customCard}>
+        <div style={styles.dateRow}>
+          <div style={styles.dateField}>
+            <label style={styles.dateLabel}>START DATE</label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={e => setStartDate(e.target.value)}
+              style={styles.dateInput}
+            />
+          </div>
+          <div style={styles.dateField}>
+            <label style={styles.dateLabel}>END DATE</label>
+            <input
+              type="date"
+              value={endDate}
+              onChange={e => setEndDate(e.target.value)}
+              style={styles.dateInput}
+            />
+          </div>
+        </div>
+        <button
+          onClick={exportCustomCSV}
+          disabled={loading === 'custom_csv'}
+          style={styles.customExportBtn}
+        >
+          {loading === 'custom_csv' ? 'Preparing...' : '⬇️ Export Custom Range'}
+        </button>
+      </div>
+
       <div style={{ height: '80px' }} />
     </div>
   );
@@ -320,8 +438,22 @@ const styles = {
   gridDesc: { fontSize: '12px', color: '#8892b0', marginBottom: '16px', lineHeight: '1.4' },
   gridAction: { fontSize: '11px', fontWeight: '700', color: '#00f5a0', letterSpacing: '0.5px' },
 
+  // --- Original Cards Restored (Yearly & Custom) ---
+  exportCard: { background: '#1a1f35', borderRadius: '14px', padding: '16px', marginBottom: '24px', border: '1px solid #2a2f45', display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
+  exportLeft: { display: 'flex', alignItems: 'center', gap: '14px' },
+  exportIcon: { width: '44px', height: '44px', background: '#0a0e1a', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0 },
+  exportTitle: { fontSize: '15px', fontWeight: '600', color: '#fff', marginBottom: '3px' },
+  exportDesc: { fontSize: '12px', color: '#8892b0' },
+  exportBtn: { padding: '10px 16px', background: '#00f5a022', border: '1px solid #00f5a044', borderRadius: '10px', color: '#00f5a0', fontSize: '13px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' },
+  customCard: { background: '#1a1f35', borderRadius: '14px', padding: '16px', marginBottom: '16px', border: '1px solid #2a2f45' },
+  dateRow: { display: 'flex', gap: '10px', marginBottom: '14px' },
+  dateField: { flex: 1 },
+  dateLabel: { display: 'block', fontSize: '11px', color: '#8892b0', fontWeight: '600', letterSpacing: '0.5px', marginBottom: '6px' },
+  dateInput: { width: '100%', padding: '10px 12px', background: '#0a0e1a', border: '1px solid #2a2f45', borderRadius: '10px', color: '#fff', fontSize: '13px', outline: 'none' },
+  customExportBtn: { width: '100%', padding: '14px', background: 'linear-gradient(135deg, #00f5a0, #0066ff)', border: 'none', borderRadius: '12px', color: '#0a0e1a', fontSize: '15px', fontWeight: '700', cursor: 'pointer' },
+
   // --- HIDDEN PDF DOM STYLING (A4 Light Theme) ---
-  hiddenWrapper: { position: 'absolute', top: '-9999px', left: '-9999px' }, // Hides it from the user
+  hiddenWrapper: { position: 'absolute', top: '-9999px', left: '-9999px' },
   pdfDocument: { width: '794px', minHeight: '1123px', background: '#ffffff', padding: '40px', boxSizing: 'border-box', fontFamily: 'sans-serif' },
   pdfHeader: { borderBottom: '2px solid #eee', paddingBottom: '20px', marginBottom: '30px' },
   pdfMetricsGrid: { display: 'flex', gap: '20px', marginBottom: '40px' },
