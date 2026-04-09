@@ -220,14 +220,6 @@ export default function QuickEntry() {
               Logged every day for {streak} days straight
             </div>
           </div>
-          {todayTotal > 0 && (
-            <div style={styles.todayTotal}>
-              <div style={styles.todayLabel}>Today</div>
-              <div style={styles.todayAmount}>
-                ₹{Number(todayTotal).toLocaleString('en-IN')}
-              </div>
-            </div>
-          )}
         </div>
       )}
 
