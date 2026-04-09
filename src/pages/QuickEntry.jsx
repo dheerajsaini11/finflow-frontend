@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { getCategories, addTransaction, getStreak, getMonthlySummary } from '../services/api';
 import toast from 'react-hot-toast';
 
-// Changed 'lend' to 'debt' to represent the combined tab
 const TYPES = ['expense', 'income', 'investment', 'debt'];
 
 const TYPE_COLORS = {
@@ -30,7 +29,7 @@ export default function QuickEntry() {
   const today = new Date().toISOString().split('T')[0];
 
   const [type, setType] = useState('expense');
-  const [debtAction, setDebtAction] = useState('lend'); // 'lend' or 'borrow'
+  const [debtAction, setDebtAction] = useState('lend'); // 'lend', 'borrow', or 'return'
   
   const [amount, setAmount] = useState('');
   const [categoryId, setCategoryId] = useState('');
@@ -56,7 +55,7 @@ export default function QuickEntry() {
         expense: 'expense',
         income: 'income',
         investment: 'investment',
-        debt: 'expense', // Fallback, category is hidden anyway
+        debt: 'expense', 
       };
       const res = await getCategories({ type: typeMap[type] });
       setCategories(res.data.categories);
@@ -124,7 +123,6 @@ export default function QuickEntry() {
       return;
     }
 
-    // Unusual amount warning
     if (type === 'expense' && Number(amount) > 10000) {
       setWarningMsg(
         `₹${Number(amount).toLocaleString('en-IN')} is a large expense. Are you sure?`
@@ -156,8 +154,15 @@ export default function QuickEntry() {
         c => String(c.id) === String(categoryId)
       );
       
+      let actionText = '';
+      if (type === 'debt') {
+        if (debtAction === 'lend') actionText = 'Lent to';
+        if (debtAction === 'borrow') actionText = 'Borrowed from';
+        if (debtAction === 'return') actionText = 'Returned/Settled with';
+      }
+
       const successMsg = type === 'debt' 
-        ? `✅ ₹${Number(amount).toLocaleString('en-IN')} ${debtAction} logged with ${personName}`
+        ? `✅ ₹${Number(amount).toLocaleString('en-IN')} ${actionText} ${personName}`
         : `✅ ${selectedCat?.icon || ''} ₹${Number(amount).toLocaleString('en-IN')} logged`;
 
       toast.success(successMsg);
@@ -167,7 +172,7 @@ export default function QuickEntry() {
       setPersonName('');
       setDate(today);
       setCategoryId('');
-      setDebtAction('lend'); // Reset to default lend
+      setDebtAction('lend'); 
 
       fetchStreak();
       fetchTodayTotal();
@@ -181,17 +186,6 @@ export default function QuickEntry() {
 
   const accentColor = TYPE_COLORS[type];
 
-  const getTimeSuggestion = () => {
-    const hour = new Date().getHours();
-    if (type !== 'expense') return null;
-    if (hour >= 6 && hour <= 9) return '☕ Morning — logging breakfast?';
-    if (hour >= 12 && hour <= 14) return '🍱 Lunch time — logging food?';
-    if (hour >= 17 && hour <= 20) return '🌆 Evening — logging dinner or travel?';
-    return null;
-  };
-
-  const suggestion = getTimeSuggestion();
-
   return (
     <div style={styles.container}>
 
@@ -203,16 +197,10 @@ export default function QuickEntry() {
             <div style={styles.warningTitle}>Unusual Amount</div>
             <div style={styles.warningText}>{warningMsg}</div>
             <div style={styles.warningBtns}>
-              <button
-                onClick={() => setShowWarning(false)}
-                style={styles.warningCancel}
-              >
+              <button onClick={() => setShowWarning(false)} style={styles.warningCancel}>
                 Edit Amount
               </button>
-              <button
-                onClick={handleSubmit}
-                style={styles.warningConfirm}
-              >
+              <button onClick={handleSubmit} style={styles.warningConfirm}>
                 Yes, Continue
               </button>
             </div>
@@ -243,7 +231,7 @@ export default function QuickEntry() {
         </div>
       )}
 
-      {/* Today's Spend Card (when no streak) */}
+      {/* Today's Spend Card */}
       {streak === 0 && todayTotal > 0 && (
         <div style={styles.todayCard}>
           <span style={styles.todayCardLabel}>Today's Expense</span>
@@ -277,51 +265,43 @@ export default function QuickEntry() {
         ))}
       </div>
 
-      {/* Smart Suggestion */}
-      {suggestion && (
-        <div style={styles.suggestionBar}>
-          <span>{suggestion}</span>
-        </div>
-      )}
+      {/* Date Row (Always Visible) */}
+      <div style={styles.field}>
+        <label style={styles.label}>DATE</label>
+        <input
+          type="date"
+          value={date}
+          max={today}
+          onChange={e => handleDateChange(e.target.value)}
+          style={{
+            ...styles.input,
+            borderColor: accentColor + '44',
+            marginBottom: '16px'
+          }}
+        />
+      </div>
 
-      {/* Date and Category Row */}
-      <div style={{...styles.row, gridTemplateColumns: type === 'debt' ? '1fr' : '1fr 1fr'}}>
-        <div style={styles.field}>
-          <label style={styles.label}>DATE</label>
-          <input
-            type="date"
-            value={date}
-            max={today}
-            onChange={e => handleDateChange(e.target.value)}
+      {/* Category Dropdown (Hidden for Debt) */}
+      {type !== 'debt' && (
+        <div style={{ ...styles.field, marginBottom: '16px' }}>
+          <label style={styles.label}>CATEGORY</label>
+          <select
+            value={categoryId}
+            onChange={e => setCategoryId(e.target.value)}
             style={{
               ...styles.input,
               borderColor: accentColor + '44',
             }}
-          />
+          >
+            <option value="">Select category</option>
+            {categories.map(cat => (
+              <option key={cat.id} value={cat.id}>
+                {cat.icon} {cat.name}
+              </option>
+            ))}
+          </select>
         </div>
-
-        {/* Hide Category Dropdown when in Lend/Borrow mode */}
-        {type !== 'debt' && (
-          <div style={styles.field}>
-            <label style={styles.label}>CATEGORY</label>
-            <select
-              value={categoryId}
-              onChange={e => setCategoryId(e.target.value)}
-              style={{
-                ...styles.input,
-                borderColor: accentColor + '44',
-              }}
-            >
-              <option value="">Select category</option>
-              {categories.map(cat => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.icon} {cat.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Lend / Borrow Action Options */}
       {type === 'debt' && (
@@ -337,7 +317,7 @@ export default function QuickEntry() {
                 border: `1px solid ${debtAction === 'lend' ? '#ffa502' : '#2a2f45'}`
               }}
             >
-              ↗️ I am Lending (They owe me)
+              ↗️ Lend
             </button>
             <button
               onClick={() => setDebtAction('borrow')}
@@ -348,7 +328,18 @@ export default function QuickEntry() {
                 border: `1px solid ${debtAction === 'borrow' ? '#ff4757' : '#2a2f45'}`
               }}
             >
-              ↙️ I am Borrowing (I owe them)
+              ↙️ Borrow
+            </button>
+            <button
+              onClick={() => setDebtAction('return')}
+              style={{
+                ...styles.debtToggleBtn,
+                background: debtAction === 'return' ? '#00f5a0' : '#1a1f35',
+                color: debtAction === 'return' ? '#0a0e1a' : '#8892b0',
+                border: `1px solid ${debtAction === 'return' ? '#00f5a0' : '#2a2f45'}`
+              }}
+            >
+              💵 Return
             </button>
           </div>
 
@@ -358,7 +349,7 @@ export default function QuickEntry() {
               type="text"
               value={personName}
               onChange={e => setPersonName(e.target.value)}
-              placeholder={debtAction === 'lend' ? "Who are you lending to?" : "Who are you borrowing from?"}
+              placeholder="Who is this transaction with?"
               style={{
                 ...styles.input,
                 borderColor: accentColor + '44',
@@ -428,118 +419,42 @@ export default function QuickEntry() {
 
 const styles = {
   container: { padding: '20px', background: '#0a0e1a', minHeight: '100vh', paddingBottom: '80px' },
-  warningOverlay: {
-    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-    background: 'rgba(0,0,0,0.7)', zIndex: 2000,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    padding: '20px',
-  },
-  warningModal: {
-    background: '#1a1f35', borderRadius: '20px', padding: '28px',
-    width: '100%', maxWidth: '360px', textAlign: 'center',
-    border: '1px solid #ff475744',
-  },
+  warningOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' },
+  warningModal: { background: '#1a1f35', borderRadius: '20px', padding: '28px', width: '100%', maxWidth: '360px', textAlign: 'center', border: '1px solid #ff475744' },
   warningIcon: { fontSize: '40px', marginBottom: '12px' },
   warningTitle: { fontSize: '18px', fontWeight: '700', color: '#fff', marginBottom: '8px' },
   warningText: { fontSize: '14px', color: '#8892b0', marginBottom: '24px', lineHeight: '1.5' },
   warningBtns: { display: 'flex', gap: '10px' },
-  warningCancel: {
-    flex: 1, padding: '12px', background: '#2a2f45', border: 'none',
-    borderRadius: '12px', color: '#fff', fontSize: '14px',
-    fontWeight: '600', cursor: 'pointer',
-  },
-  warningConfirm: {
-    flex: 1, padding: '12px', background: '#ff4757', border: 'none',
-    borderRadius: '12px', color: '#fff', fontSize: '14px',
-    fontWeight: '700', cursor: 'pointer',
-  },
-  streakBanner: {
-    background: 'linear-gradient(135deg, #2d1f00, #1a1200)',
-    border: '1px solid #ffa50244', borderRadius: '14px',
-    padding: '14px 16px', display: 'flex',
-    alignItems: 'center', gap: '12px', marginBottom: '20px',
-  },
+  warningCancel: { flex: 1, padding: '12px', background: '#2a2f45', border: 'none', borderRadius: '12px', color: '#fff', fontSize: '14px', fontWeight: '600', cursor: 'pointer' },
+  warningConfirm: { flex: 1, padding: '12px', background: '#ff4757', border: 'none', borderRadius: '12px', color: '#fff', fontSize: '14px', fontWeight: '700', cursor: 'pointer' },
+  streakBanner: { background: 'linear-gradient(135deg, #2d1f00, #1a1200)', border: '1px solid #ffa50244', borderRadius: '14px', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' },
   streakFire: { fontSize: '32px' },
   streakText: { fontSize: '15px', fontWeight: '700', color: '#ffa502' },
   streakSub: { fontSize: '12px', color: '#8892b0', marginTop: '2px' },
   todayTotal: { marginLeft: 'auto', textAlign: 'right' },
   todayLabel: { fontSize: '10px', color: '#8892b0', fontWeight: '600' },
   todayAmount: { fontSize: '16px', fontWeight: '700', color: '#ff4757' },
-  todayCard: {
-    background: '#1a1f35', border: '1px solid #2a2f45',
-    borderRadius: '12px', padding: '12px 16px',
-    display: 'flex', justifyContent: 'space-between',
-    alignItems: 'center', marginBottom: '16px',
-  },
+  todayCard: { background: '#1a1f35', border: '1px solid #2a2f45', borderRadius: '12px', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' },
   todayCardLabel: { fontSize: '13px', color: '#8892b0' },
   todayCardAmount: { fontSize: '16px', fontWeight: '700', color: '#ff4757' },
   header: { marginBottom: '16px' },
   headerTitle: { fontSize: '24px', fontWeight: '700', color: '#fff' },
   headerSub: { fontSize: '13px', color: '#8892b0', marginTop: '4px' },
-  typeRow: {
-    display: 'flex', gap: '8px',
-    marginBottom: '16px', flexWrap: 'wrap',
-  },
-  typeBtn: {
-    padding: '8px 14px', borderRadius: '20px',
-    fontSize: '13px', fontWeight: '600', cursor: 'pointer',
-    transition: 'all 0.2s',
-  },
-  suggestionBar: {
-    background: '#1a1f35', border: '1px solid #2a2f45',
-    borderRadius: '10px', padding: '10px 14px',
-    fontSize: '13px', color: '#8892b0', marginBottom: '16px',
-  },
-  row: {
-    display: 'grid', gridTemplateColumns: '1fr 1fr',
-    gap: '12px', marginBottom: '16px',
-  },
+  typeRow: { display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' },
+  typeBtn: { padding: '8px 14px', borderRadius: '20px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s' },
   field: { display: 'flex', flexDirection: 'column', gap: '6px' },
-  fullField: {
-    display: 'flex', flexDirection: 'column',
-    gap: '6px', marginBottom: '16px',
-  },
-  label: {
-    fontSize: '11px', color: '#8892b0',
-    fontWeight: '600', letterSpacing: '0.5px',
-  },
-  input: {
-    padding: '10px 12px', background: '#1a1f35',
-    border: '1px solid #2a2f45', borderRadius: '10px',
-    color: '#fff', fontSize: '14px', outline: 'none', width: '100%',
-  },
-  amountContainer: {
-    display: 'flex', alignItems: 'center',
-    justifyContent: 'center', gap: '8px',
-    padding: '20px 0 12px',
-  },
+  fullField: { display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px' },
+  label: { fontSize: '11px', color: '#8892b0', fontWeight: '600', letterSpacing: '0.5px' },
+  input: { padding: '10px 12px', background: '#1a1f35', border: '1px solid #2a2f45', borderRadius: '10px', color: '#fff', fontSize: '14px', outline: 'none', width: '100%' },
+  amountContainer: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '20px 0 12px' },
   currencySymbol: { fontSize: '32px', color: '#8892b0', fontWeight: '300' },
-  amountDisplay: {
-    fontSize: '52px', fontWeight: '700',
-    transition: 'color 0.2s', minWidth: '100px', textAlign: 'center',
-  },
-  noteInput: {
-    width: '100%', padding: '12px 16px',
-    background: '#1a1f35', border: '1px solid #2a2f45',
-    borderRadius: '10px', color: '#fff', fontSize: '14px',
-    outline: 'none', marginBottom: '16px',
-  },
-  saveBtn: {
-    width: '100%', padding: '16px', borderRadius: '14px',
-    border: 'none', fontSize: '16px', fontWeight: '700',
-    marginBottom: '20px', transition: 'all 0.2s',
-  },
-  numpad: {
-    display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px',
-  },
-  numKey: {
-    padding: '18px', borderRadius: '12px',
-    border: '1px solid #2a2f45', color: '#fff',
-    fontWeight: '600', cursor: 'pointer', transition: 'all 0.15s',
-  },
+  amountDisplay: { fontSize: '52px', fontWeight: '700', transition: 'color 0.2s', minWidth: '100px', textAlign: 'center' },
+  noteInput: { width: '100%', padding: '12px 16px', background: '#1a1f35', border: '1px solid #2a2f45', borderRadius: '10px', color: '#fff', fontSize: '14px', outline: 'none', marginBottom: '16px' },
+  saveBtn: { width: '100%', padding: '16px', borderRadius: '14px', border: 'none', fontSize: '16px', fontWeight: '700', marginBottom: '20px', transition: 'all 0.2s' },
+  numpad: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' },
+  numKey: { padding: '18px', borderRadius: '12px', border: '1px solid #2a2f45', color: '#fff', fontWeight: '600', cursor: 'pointer', transition: 'all 0.15s' },
   
-  // --- NEW: Debt Action Styles ---
   debtWrapper: { marginBottom: '16px', padding: '16px', background: '#1a1f35', borderRadius: '12px', border: '1px solid #2a2f45' },
-  debtToggleRow: { display: 'flex', gap: '10px', marginTop: '8px', marginBottom: '16px' },
-  debtToggleBtn: { flex: 1, padding: '12px', borderRadius: '10px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s', textAlign: 'center' },
+  debtToggleRow: { display: 'flex', gap: '8px', marginTop: '8px', marginBottom: '16px' },
+  debtToggleBtn: { flex: 1, padding: '10px 4px', borderRadius: '10px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s', textAlign: 'center' },
 };
