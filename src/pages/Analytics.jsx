@@ -201,14 +201,17 @@ export default function Analytics() {
               <div style={styles.empty}>No expense data for this month</div>
             ) : (
               <>
-                <ResponsiveContainer width="100%" height={260}>
-                  <PieChart>
-                    <Pie data={pieData} cx="50%" cy="50%" innerRadius={70} outerRadius={110} dataKey="value">
-                      {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-                    </Pie>
-                    <Tooltip formatter={(val) => formatAmount(val)} contentStyle={{ background: '#1a1f35', border: '1px solid #2a2f45', borderRadius: '8px' }} />
-                  </PieChart>
-                </ResponsiveContainer>
+                <div style={styles.pieWrapper}>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <PieChart>
+                      {/* Using percentages for responsive scaling */}
+                      <Pie data={pieData} cx="50%" cy="50%" innerRadius="55%" outerRadius="80%" dataKey="value">
+                        {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                      </Pie>
+                      <Tooltip formatter={(val) => formatAmount(val)} contentStyle={{ background: '#1a1f35', border: '1px solid #2a2f45', borderRadius: '8px' }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
                 <div style={styles.legend}>
                   {pieData.map((item, i) => {
                     const total = pieData.reduce((s, p) => s + p.value, 0);
@@ -307,11 +310,15 @@ const styles = {
   monthSelect: { background: '#0a0e1a', border: '1px solid #2a2f45', color: '#fff', padding: '6px 10px', borderRadius: '8px', fontSize: '13px', outline: 'none' },
   empty: { color: '#8892b0', textAlign: 'center', padding: '20px', width: '100%' },
   
-  // Merged Card Layout Styles
+  // --- Merged Card Layout Styles ---
   mergedCardContent: { display: 'flex', flexWrap: 'wrap', gap: '40px', alignItems: 'center' },
-  pieSection: { flex: 1, minWidth: '280px', display: 'flex', alignItems: 'center' },
   
-  legend: { flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' },
+  // Added flexWrap and gap to allow legend to drop below on mobile
+  pieSection: { flex: 1, minWidth: '280px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: '20px' },
+  pieWrapper: { flex: '1 1 200px', maxWidth: '300px', width: '100%' }, 
+  
+  // Added minWidth to force wrap on tiny screens
+  legend: { flex: '1 1 150px', minWidth: '150px', display: 'flex', flexDirection: 'column', gap: '8px' },
   legendItem: { display: 'flex', alignItems: 'center', gap: '8px' },
   legendDot: { width: '10px', height: '10px', borderRadius: '50%', flexShrink: 0 },
   legendName: { fontSize: '12px', color: '#fff', flex: 1 },
