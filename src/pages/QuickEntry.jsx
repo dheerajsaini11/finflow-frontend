@@ -2,26 +2,36 @@ import { useState, useEffect } from 'react';
 import { getCategories, addTransaction, getStreak, getMonthlySummary } from '../services/api';
 import toast from 'react-hot-toast';
 
-const TYPES = ['expense', 'income', 'investment', 'lend'];
+// Changed 'lend' to 'debt' to represent the combined tab
+const TYPES = ['expense', 'income', 'investment', 'debt'];
 
 const TYPE_COLORS = {
   expense: '#ff4757',
   income: '#00f5a0',
   investment: '#6c5ce7',
-  lend: '#ffa502',
+  debt: '#ffa502',
 };
 
 const TYPE_ICONS = {
   expense: '💸',
   income: '💰',
   investment: '📈',
-  lend: '🤝',
+  debt: '🤝',
+};
+
+const DISPLAY_NAMES = {
+  expense: 'Expense',
+  income: 'Income',
+  investment: 'Investment',
+  debt: 'Lend / Borrow',
 };
 
 export default function QuickEntry() {
   const today = new Date().toISOString().split('T')[0];
 
   const [type, setType] = useState('expense');
+  const [debtAction, setDebtAction] = useState('lend'); // 'lend' or 'borrow'
+  
   const [amount, setAmount] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [note, setNote] = useState('');
@@ -46,7 +56,7 @@ export default function QuickEntry() {
         expense: 'expense',
         income: 'income',
         investment: 'investment',
-        lend: 'expense',
+        debt: 'expense', // Fallback, category is hidden anyway
       };
       const res = await getCategories({ type: typeMap[type] });
       setCategories(res.data.categories);
@@ -109,7 +119,7 @@ export default function QuickEntry() {
       toast.error('Future dates are not allowed');
       return;
     }
-    if (type === 'lend' && !personName.trim()) {
+    if (type === 'debt' && !personName.trim()) {
       toast.error('Please enter person name');
       return;
     }
@@ -131,27 +141,33 @@ export default function QuickEntry() {
     setLoading(true);
 
     try {
+      const submitType = type === 'debt' ? debtAction : type;
+
       await addTransaction({
-        type,
+        type: submitType,
         amount: Number(amount),
-        category_id: categoryId || null,
+        category_id: type === 'debt' ? null : (categoryId || null),
         note: note.trim() || null,
         date,
-        person_name: personName.trim() || null,
+        person_name: type === 'debt' ? personName.trim() : null,
       });
 
       const selectedCat = categories.find(
         c => String(c.id) === String(categoryId)
       );
-      toast.success(
-        `✅ ${selectedCat?.icon || ''} ₹${Number(amount).toLocaleString('en-IN')} logged`
-      );
+      
+      const successMsg = type === 'debt' 
+        ? `✅ ₹${Number(amount).toLocaleString('en-IN')} ${debtAction} logged with ${personName}`
+        : `✅ ${selectedCat?.icon || ''} ₹${Number(amount).toLocaleString('en-IN')} logged`;
+
+      toast.success(successMsg);
 
       setAmount('');
       setNote('');
       setPersonName('');
       setDate(today);
       setCategoryId('');
+      setDebtAction('lend'); // Reset to default lend
 
       fetchStreak();
       fetchTodayTotal();
@@ -256,7 +272,7 @@ export default function QuickEntry() {
               border: `1px solid ${type === t ? TYPE_COLORS[t] : '#2a2f45'}`,
             }}
           >
-            {TYPE_ICONS[t]} {t.charAt(0).toUpperCase() + t.slice(1)}
+            {TYPE_ICONS[t]} {DISPLAY_NAMES[t]}
           </button>
         ))}
       </div>
@@ -269,7 +285,7 @@ export default function QuickEntry() {
       )}
 
       {/* Date and Category Row */}
-      <div style={styles.row}>
+      <div style={{...styles.row, gridTemplateColumns: type === 'debt' ? '1fr' : '1fr 1fr'}}>
         <div style={styles.field}>
           <label style={styles.label}>DATE</label>
           <input
@@ -284,40 +300,71 @@ export default function QuickEntry() {
           />
         </div>
 
-        <div style={styles.field}>
-          <label style={styles.label}>CATEGORY</label>
-          <select
-            value={categoryId}
-            onChange={e => setCategoryId(e.target.value)}
-            style={{
-              ...styles.input,
-              borderColor: accentColor + '44',
-            }}
-          >
-            <option value="">Select category</option>
-            {categories.map(cat => (
-              <option key={cat.id} value={cat.id}>
-                {cat.icon} {cat.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Hide Category Dropdown when in Lend/Borrow mode */}
+        {type !== 'debt' && (
+          <div style={styles.field}>
+            <label style={styles.label}>CATEGORY</label>
+            <select
+              value={categoryId}
+              onChange={e => setCategoryId(e.target.value)}
+              style={{
+                ...styles.input,
+                borderColor: accentColor + '44',
+              }}
+            >
+              <option value="">Select category</option>
+              {categories.map(cat => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.icon} {cat.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
-      {/* Person Name for Lend */}
-      {type === 'lend' && (
-        <div style={styles.fullField}>
-          <label style={styles.label}>PERSON NAME</label>
-          <input
-            type="text"
-            value={personName}
-            onChange={e => setPersonName(e.target.value)}
-            placeholder="Who are you lending to?"
-            style={{
-              ...styles.input,
-              borderColor: accentColor + '44',
-            }}
-          />
+      {/* Lend / Borrow Action Options */}
+      {type === 'debt' && (
+        <div style={styles.debtWrapper}>
+          <label style={styles.label}>TRANSACTION TYPE</label>
+          <div style={styles.debtToggleRow}>
+            <button
+              onClick={() => setDebtAction('lend')}
+              style={{
+                ...styles.debtToggleBtn,
+                background: debtAction === 'lend' ? '#ffa502' : '#1a1f35',
+                color: debtAction === 'lend' ? '#0a0e1a' : '#8892b0',
+                border: `1px solid ${debtAction === 'lend' ? '#ffa502' : '#2a2f45'}`
+              }}
+            >
+              ↗️ I am Lending (They owe me)
+            </button>
+            <button
+              onClick={() => setDebtAction('borrow')}
+              style={{
+                ...styles.debtToggleBtn,
+                background: debtAction === 'borrow' ? '#ff4757' : '#1a1f35',
+                color: debtAction === 'borrow' ? '#0a0e1a' : '#8892b0',
+                border: `1px solid ${debtAction === 'borrow' ? '#ff4757' : '#2a2f45'}`
+              }}
+            >
+              ↙️ I am Borrowing (I owe them)
+            </button>
+          </div>
+
+          <div style={styles.fullField}>
+            <label style={styles.label}>PERSON NAME</label>
+            <input
+              type="text"
+              value={personName}
+              onChange={e => setPersonName(e.target.value)}
+              placeholder={debtAction === 'lend' ? "Who are you lending to?" : "Who are you borrowing from?"}
+              style={{
+                ...styles.input,
+                borderColor: accentColor + '44',
+              }}
+            />
+          </div>
         </div>
       )}
 
@@ -355,7 +402,7 @@ export default function QuickEntry() {
       >
         {loading
           ? 'Saving...'
-          : `Save ${type.charAt(0).toUpperCase() + type.slice(1)}`}
+          : `Save ${type === 'debt' ? debtAction.charAt(0).toUpperCase() + debtAction.slice(1) : DISPLAY_NAMES[type]}`}
       </button>
 
       {/* Numpad */}
@@ -380,7 +427,7 @@ export default function QuickEntry() {
 }
 
 const styles = {
-  container: { padding: '20px', background: '#0a0e1a', minHeight: '100vh' },
+  container: { padding: '20px', background: '#0a0e1a', minHeight: '100vh', paddingBottom: '80px' },
   warningOverlay: {
     position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
     background: 'rgba(0,0,0,0.7)', zIndex: 2000,
@@ -490,4 +537,9 @@ const styles = {
     border: '1px solid #2a2f45', color: '#fff',
     fontWeight: '600', cursor: 'pointer', transition: 'all 0.15s',
   },
+  
+  // --- NEW: Debt Action Styles ---
+  debtWrapper: { marginBottom: '16px', padding: '16px', background: '#1a1f35', borderRadius: '12px', border: '1px solid #2a2f45' },
+  debtToggleRow: { display: 'flex', gap: '10px', marginTop: '8px', marginBottom: '16px' },
+  debtToggleBtn: { flex: 1, padding: '12px', borderRadius: '10px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s', textAlign: 'center' },
 };

@@ -103,7 +103,7 @@ export default function Lend() {
         </div>
         <div style={styles.summaryRow}>
           <div>
-            <div style={styles.summaryLabel}>Total Lent</div>
+            <div style={styles.summaryLabel}>Total Lend</div>
             <div style={{ ...styles.summaryVal, color: '#ffa502' }}>
               {formatAmount(totalLent)}
             </div>
