@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getLendBalances, getPersonTransactions, settlePerson } from '../services/api';
+import { getLendBalances, getPersonTransactions, settlePerson, addTransaction } from '../services/api';
 import toast from 'react-hot-toast';
 
 export default function Lend() {
@@ -7,6 +7,10 @@ export default function Lend() {
   const [selected, setSelected] = useState(null);
   const [personTxs, setPersonTxs] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // New state for Partial Returns
+  const [returnMode, setReturnMode] = useState(null);
+  const [returnAmount, setReturnAmount] = useState('');
 
   useEffect(() => {
     fetchBalances();
@@ -28,6 +32,7 @@ export default function Lend() {
       const res = await getPersonTransactions(encodeURIComponent(name));
       setPersonTxs(res.data.transactions);
       setSelected(name);
+      setReturnMode(null); // Reset partial return UI if open
     } catch (err) {
       toast.error('Failed to load transactions');
     }
@@ -42,6 +47,35 @@ export default function Lend() {
       setSelected(null);
     } catch (err) {
       toast.error('Failed to settle');
+    }
+  };
+
+  // --- NEW: Partial Return Logic ---
+  const handlePartialReturn = async (personName) => {
+    if (!returnAmount || Number(returnAmount) <= 0) {
+      toast.error('Please enter a valid amount');
+      return;
+    }
+    
+    try {
+      // Create a standard 'return' transaction
+      await addTransaction({
+        type: 'return',
+        amount: Number(returnAmount),
+        person_name: personName,
+        date: new Date().toISOString().split('T')[0], // Today's date
+        note: 'Partial Return'
+      });
+      
+      toast.success(`Logged ₹${returnAmount} return from ${personName}`);
+      setReturnAmount('');
+      setReturnMode(null);
+      
+      // Refresh the UI
+      fetchBalances();
+      fetchPersonTxs(personName);
+    } catch (err) {
+      toast.error('Failed to log partial return');
     }
   };
 
@@ -159,13 +193,45 @@ export default function Lend() {
                     </div>
                   ))}
 
+                  {/* Action Buttons (Matches UI Design structure) */}
                   {!isSettled && (
-                    <button
-                      onClick={() => handleSettle(b.person_name)}
-                      style={styles.settleBtn}
-                    >
-                      ✅ Mark as Settled
-                    </button>
+                    <div style={styles.actionRow}>
+                      {returnMode === b.person_name ? (
+                        // Inline Input Form for Partial Return
+                        <div style={styles.returnForm}>
+                          <input
+                            type="number"
+                            value={returnAmount}
+                            onChange={(e) => setReturnAmount(e.target.value)}
+                            placeholder="Enter amount..."
+                            style={styles.returnInput}
+                            autoFocus
+                          />
+                          <button onClick={() => handlePartialReturn(b.person_name)} style={styles.confirmBtn}>
+                            Save
+                          </button>
+                          <button onClick={() => setReturnMode(null)} style={styles.cancelBtn}>
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        // Standard 2-Button Row
+                        <>
+                          <button
+                            onClick={() => setReturnMode(b.person_name)}
+                            style={styles.returnBtn}
+                          >
+                            💵 PARTIAL RETURN
+                          </button>
+                          <button
+                            onClick={() => handleSettle(b.person_name)}
+                            style={styles.settleBtnHalf}
+                          >
+                            ✅ SETTLE
+                          </button>
+                        </>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
@@ -191,7 +257,7 @@ export default function Lend() {
 }
 
 const styles = {
-  container: { padding: '20px', background: '#0a0e1a', minHeight: '100vh' },
+  container: { padding: '20px', background: '#0a0e1a', minHeight: '100vh', paddingBottom: '80px' },
   loading: { display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0a0e1a', color: '#00f5a0' },
   header: { marginBottom: '20px', paddingTop: '10px' },
   title: { fontSize: '24px', fontWeight: '700', color: '#fff' },
@@ -235,12 +301,25 @@ const styles = {
   txType: { fontSize: '13px', fontWeight: '600', color: '#fff' },
   txDate: { fontSize: '11px', color: '#8892b0' },
   txAmount: { fontSize: '14px', fontWeight: '700' },
-  settleBtn: {
-    width: '100%', padding: '12px', marginTop: '12px',
-    background: '#00f5a022', border: '1px solid #00f5a044',
-    borderRadius: '10px', color: '#00f5a0', fontSize: '14px',
-    fontWeight: '600', cursor: 'pointer',
+  
+  // --- NEW: Action Buttons & Form Styles ---
+  actionRow: { display: 'flex', gap: '10px', marginTop: '16px' },
+  returnBtn: { 
+    flex: 1, padding: '12px', background: '#2a2f45', border: 'none', 
+    borderRadius: '10px', color: '#fff', fontSize: '13px', fontWeight: '600', cursor: 'pointer' 
   },
+  settleBtnHalf: { 
+    flex: 1, padding: '12px', background: '#00f5a022', border: '1px solid #00f5a044', 
+    borderRadius: '10px', color: '#00f5a0', fontSize: '13px', fontWeight: '600', cursor: 'pointer' 
+  },
+  returnForm: { display: 'flex', gap: '8px', width: '100%' },
+  returnInput: { 
+    flex: 1, padding: '10px 12px', background: '#0a0e1a', border: '1px solid #2a2f45', 
+    borderRadius: '8px', color: '#fff', fontSize: '14px', outline: 'none' 
+  },
+  confirmBtn: { padding: '0 16px', background: '#00f5a0', border: 'none', borderRadius: '8px', color: '#0a0e1a', fontWeight: '700', cursor: 'pointer' },
+  cancelBtn: { padding: '0 16px', background: '#ff475722', border: '1px solid #ff475744', borderRadius: '8px', color: '#ff4757', fontWeight: '700', cursor: 'pointer' },
+
   insightCard: {
     background: '#ffa50222', border: '1px solid #ffa50244',
     borderRadius: '12px', padding: '14px', marginTop: '8px',
