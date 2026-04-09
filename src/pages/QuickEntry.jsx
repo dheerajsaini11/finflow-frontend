@@ -265,97 +265,71 @@ export default function QuickEntry() {
         ))}
       </div>
 
-      {/* Date Row (Always Visible) */}
-      <div style={styles.field}>
-        <label style={styles.label}>DATE</label>
-        <input
-          type="date"
-          value={date}
-          max={today}
-          onChange={e => handleDateChange(e.target.value)}
-          style={{
-            ...styles.input,
-            borderColor: accentColor + '44',
-            marginBottom: '16px'
-          }}
-        />
-      </div>
-
-      {/* Category Dropdown (Hidden for Debt) */}
-      {type !== 'debt' && (
-        <div style={{ ...styles.field, marginBottom: '16px' }}>
-          <label style={styles.label}>CATEGORY</label>
-          <select
-            value={categoryId}
-            onChange={e => setCategoryId(e.target.value)}
+      {/* Horizontal Date and Category Row */}
+      <div style={styles.row}>
+        <div style={styles.field}>
+          <label style={styles.label}>DATE</label>
+          <input
+            type="date"
+            value={date}
+            max={today}
+            onChange={e => handleDateChange(e.target.value)}
             style={{
               ...styles.input,
               borderColor: accentColor + '44',
             }}
-          >
-            <option value="">Select category</option>
-            {categories.map(cat => (
-              <option key={cat.id} value={cat.id}>
-                {cat.icon} {cat.name}
-              </option>
-            ))}
-          </select>
+          />
         </div>
-      )}
 
-      {/* Lend / Borrow Action Options */}
-      {type === 'debt' && (
-        <div style={styles.debtWrapper}>
-          <label style={styles.label}>TRANSACTION TYPE</label>
-          <div style={styles.debtToggleRow}>
-            <button
-              onClick={() => setDebtAction('lend')}
-              style={{
-                ...styles.debtToggleBtn,
-                background: debtAction === 'lend' ? '#ffa502' : '#1a1f35',
-                color: debtAction === 'lend' ? '#0a0e1a' : '#8892b0',
-                border: `1px solid ${debtAction === 'lend' ? '#ffa502' : '#2a2f45'}`
-              }}
-            >
-              ↗️ Lend
-            </button>
-            <button
-              onClick={() => setDebtAction('borrow')}
-              style={{
-                ...styles.debtToggleBtn,
-                background: debtAction === 'borrow' ? '#ff4757' : '#1a1f35',
-                color: debtAction === 'borrow' ? '#0a0e1a' : '#8892b0',
-                border: `1px solid ${debtAction === 'borrow' ? '#ff4757' : '#2a2f45'}`
-              }}
-            >
-              ↙️ Borrow
-            </button>
-            <button
-              onClick={() => setDebtAction('return')}
-              style={{
-                ...styles.debtToggleBtn,
-                background: debtAction === 'return' ? '#00f5a0' : '#1a1f35',
-                color: debtAction === 'return' ? '#0a0e1a' : '#8892b0',
-                border: `1px solid ${debtAction === 'return' ? '#00f5a0' : '#2a2f45'}`
-              }}
-            >
-              💵 Return
-            </button>
-          </div>
-
-          <div style={styles.fullField}>
-            <label style={styles.label}>PERSON NAME</label>
-            <input
-              type="text"
-              value={personName}
-              onChange={e => setPersonName(e.target.value)}
-              placeholder="Who is this transaction with?"
+        <div style={styles.field}>
+          <label style={styles.label}>{type === 'debt' ? 'TRANSACTION TYPE' : 'CATEGORY'}</label>
+          {type === 'debt' ? (
+            <select
+              value={debtAction}
+              onChange={e => setDebtAction(e.target.value)}
               style={{
                 ...styles.input,
                 borderColor: accentColor + '44',
               }}
-            />
-          </div>
+            >
+              <option value="lend">↗️ Lend</option>
+              <option value="borrow">↙️ Borrow</option>
+              <option value="return">💵 Return</option>
+            </select>
+          ) : (
+            <select
+              value={categoryId}
+              onChange={e => setCategoryId(e.target.value)}
+              style={{
+                ...styles.input,
+                borderColor: accentColor + '44',
+              }}
+            >
+              <option value="">Select category</option>
+              {categories.map(cat => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.icon} {cat.name}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      </div>
+
+      {/* Person Name (Only visible when Lend/Borrow is selected) */}
+      {type === 'debt' && (
+        <div style={styles.fullField}>
+          <label style={styles.label}>PERSON NAME</label>
+          <input
+            type="text"
+            value={personName}
+            onChange={e => setPersonName(e.target.value)}
+            placeholder="Who is this transaction with?"
+            style={{
+              ...styles.input,
+              borderColor: accentColor + '44',
+            }}
+          />
         </div>
       )}
 
@@ -442,8 +416,12 @@ const styles = {
   headerSub: { fontSize: '13px', color: '#8892b0', marginTop: '4px' },
   typeRow: { display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' },
   typeBtn: { padding: '8px 14px', borderRadius: '20px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s' },
+  
+  // Restored the exact horizontal layout
+  row: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' },
   field: { display: 'flex', flexDirection: 'column', gap: '6px' },
   fullField: { display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px' },
+  
   label: { fontSize: '11px', color: '#8892b0', fontWeight: '600', letterSpacing: '0.5px' },
   input: { padding: '10px 12px', background: '#1a1f35', border: '1px solid #2a2f45', borderRadius: '10px', color: '#fff', fontSize: '14px', outline: 'none', width: '100%' },
   amountContainer: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '20px 0 12px' },
@@ -453,8 +431,4 @@ const styles = {
   saveBtn: { width: '100%', padding: '16px', borderRadius: '14px', border: 'none', fontSize: '16px', fontWeight: '700', marginBottom: '20px', transition: 'all 0.2s' },
   numpad: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' },
   numKey: { padding: '18px', borderRadius: '12px', border: '1px solid #2a2f45', color: '#fff', fontWeight: '600', cursor: 'pointer', transition: 'all 0.15s' },
-  
-  debtWrapper: { marginBottom: '16px', padding: '16px', background: '#1a1f35', borderRadius: '12px', border: '1px solid #2a2f45' },
-  debtToggleRow: { display: 'flex', gap: '8px', marginTop: '8px', marginBottom: '16px' },
-  debtToggleBtn: { flex: 1, padding: '10px 4px', borderRadius: '10px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s', textAlign: 'center' },
 };
