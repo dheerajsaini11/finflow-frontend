@@ -251,6 +251,17 @@ export default function Lend() {
         </div>
       )}
 
+      {/* NEW: Borrow Insight */}
+      {balances.filter(b => Number(b.balance) < 0).length > 0 && (
+        <div style={styles.insightCardBorrow}>
+          <span>⚠️</span>
+          <span>
+            You owe money to {balances.filter(b => Number(b.balance) < 0).length} people
+            totalling {formatAmount(Math.abs(totalOwed))}.
+          </span>
+        </div>
+      )}
+
       <div style={{ height: '20px' }} />
     </div>
   );
@@ -325,5 +336,12 @@ const styles = {
     borderRadius: '12px', padding: '14px', marginTop: '8px',
     display: 'flex', gap: '10px', alignItems: 'flex-start',
     fontSize: '13px', color: '#ffa502',
+  },
+  // NEW STYLE:
+  insightCardBorrow: {
+    background: '#ff475722', border: '1px solid #ff475744',
+    borderRadius: '12px', padding: '14px', marginTop: '8px',
+    display: 'flex', gap: '10px', alignItems: 'flex-start',
+    fontSize: '13px', color: '#ff4757',
   },
 };
