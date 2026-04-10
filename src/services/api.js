@@ -40,6 +40,7 @@ export const getYearlyAnalytics = (params) => API.get('/dashboard/analytics', { 
 export const getLendBalances = () => API.get('/lend');
 export const getPersonTransactions = (name) => API.get(`/lend/${name}`);
 export const settlePerson = (name) => API.put(`/lend/${name}/settle`);
+export const deleteSettledPerson = (name) => API.delete(`/lend/settled/${encodeURIComponent(name)}`);
 
 // Budget
 export const getBudgets = (params) => API.get('/budget', { params });
