@@ -125,7 +125,7 @@ export default function Navbar() {
           style={styles.tab}
         >
           <span style={styles.icon}>
-            {isMoreActive ? '●●●' : '···'}
+            {isMoreActive ? '···' : '···'}
           </span>
           <span style={{
             ...styles.label,
