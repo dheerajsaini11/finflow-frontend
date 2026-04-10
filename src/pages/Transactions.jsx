@@ -7,6 +7,7 @@ const TYPE_COLORS = {
   income: '#00f5a0',
   investment: '#6c5ce7',
   lend: '#ffa502',
+  borrow: '#ff4757', // Added borrow color
   return: '#00f5a0',
 };
 
@@ -15,6 +16,7 @@ const TYPE_ICONS = {
   income: '💰',
   investment: '📈',
   lend: '🤝',
+  borrow: '↙️',     // Added borrow icon
   return: '↩️',
 };
 
@@ -52,6 +54,7 @@ export default function Transactions() {
         income: 'income',
         investment: 'investment',
         lend: 'expense',
+        borrow: 'expense', // Added borrow mapping
         return: 'expense',
       };
       const res = await getCategories({ type: typeMap[type] || 'expense' });
@@ -119,6 +122,12 @@ export default function Transactions() {
     });
   };
 
+  // Helper function to capitalize the first letter
+  const capitalize = (str) => {
+    if (!str) return '';
+    return str.charAt(0).toUpperCase() + str.slice(1);
+  };
+
   const filtered = transactions.filter(tx => {
     if (!search) return true;
     return (
@@ -135,7 +144,8 @@ export default function Transactions() {
     return acc;
   }, {});
 
-  const FILTERS = ['all', 'expense', 'income', 'investment', 'lend'];
+  // NEW: Added 'borrow' and 'return' to the FILTERS array
+  const FILTERS = ['all', 'expense', 'income', 'investment', 'lend', 'borrow', 'return'];
 
   return (
     <div style={styles.container}>
@@ -158,7 +168,8 @@ export default function Transactions() {
                 background: TYPE_COLORS[editTx.type] + '22',
                 color: TYPE_COLORS[editTx.type],
               }}>
-                {TYPE_ICONS[editTx.type]} {editTx.type}
+                {/* Capitalized Type in Modal */}
+                {TYPE_ICONS[editTx.type]} {capitalize(editTx.type)}
               </span>
             </div>
 
@@ -205,7 +216,7 @@ export default function Transactions() {
               </select>
             </div>
 
-            {(editTx.type === 'lend' || editTx.type === 'return') && (
+            {(editTx.type === 'lend' || editTx.type === 'return' || editTx.type === 'borrow') && (
               <div style={styles.formField}>
                 <label style={styles.formLabel}>PERSON NAME</label>
                 <input
@@ -279,7 +290,7 @@ export default function Transactions() {
               color: filter === f ? '#0a0e1a' : '#8892b0',
             }}
           >
-            {f.charAt(0).toUpperCase() + f.slice(1)}
+            {capitalize(f)}
           </button>
         ))}
       </div>
@@ -303,13 +314,15 @@ export default function Transactions() {
                 </div>
                 <div style={styles.txInfo}>
                   <div style={styles.txName}>
-                    {tx.category_name || tx.person_name || tx.type}
+                    {/* Capitalized fallback type */}
+                    {tx.category_name || tx.person_name || capitalize(tx.type)}
                   </div>
                   {tx.note && (
                     <div style={styles.txNote}>{tx.note}</div>
                   )}
                   <div style={styles.txMeta}>
-                    {formatDate(tx.date)} • {tx.type}
+                    {/* Capitalized Meta Type */}
+                    {formatDate(tx.date)} • {capitalize(tx.type)}
                   </div>
                 </div>
                 <div style={styles.txRight}>
@@ -340,7 +353,7 @@ export default function Transactions() {
           </div>
         ))
       )}
-      <div style={{ height: '20px' }} />
+      <div style={{ height: '80px' }} /> {/* Padded for bottom navigation bar */}
     </div>
   );
 }

@@ -92,7 +92,7 @@ export default function Lend() {
   return (
     <div style={styles.container}>
       <div style={styles.header}>
-        <div style={styles.title}>Lend & Return</div>
+        <div style={styles.title}>Lend, Borrow & Return</div>
       </div>
 
       {/* Summary Card */}

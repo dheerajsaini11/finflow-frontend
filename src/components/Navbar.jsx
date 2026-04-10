@@ -12,7 +12,7 @@ const mainTabs = [
 
 const moreTabs = [
   { path: '/budget', icon: '💰', label: 'Budget Planner', desc: 'Set and track category budgets' },
-  { path: '/lend', icon: '🤝', label: 'Lend & Return', desc: 'Track money lent to others' },
+  { path: '/lend', icon: '🤝', label: 'Lend, Borrow & Return', desc: 'Track money lent, borrowed, or returned' },
   { path: '/categories', icon: '🏷️', label: 'Manage Categories', desc: 'Add and edit your categories' },
   { path: '/profile', icon: '👤', label: 'Profile', desc: 'Account settings and details' },
   { path: '/export', icon: '📤', label: 'Export Center', desc: 'Download reports and data' },
