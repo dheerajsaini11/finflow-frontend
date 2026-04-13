@@ -10,6 +10,11 @@ export default function Dashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // NEW: Header & Profile States
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [profilePic, setProfilePic] = useState(null);
+
   useEffect(() => {
     fetchDashboard();
   }, []);
@@ -36,6 +41,34 @@ export default function Dashboard() {
     return { label: 'Poor', color: '#ff4757' };
   };
 
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 12) return 'Good Morning';
+    if (hour >= 12 && hour < 17) return 'Good Afternoon';
+    if (hour >= 17 && hour < 21) return 'Good Evening';
+    return 'Good Night';
+  };  
+
+  // NEW: Navigation handler from Drawer/Profile
+  const handleNavigate = (path) => {
+    setIsDrawerOpen(false);
+    setIsProfileOpen(false);
+    navigate(path);
+  };
+
+  // NEW: Profile Picture Upload Handler
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setProfilePic(reader.result);
+        toast.success('Profile picture updated!');
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   if (loading) {
     return (
       <div style={styles.loading}>
@@ -55,25 +88,99 @@ export default function Dashboard() {
     ? (((summary.expense - last.expense) / last.expense) * 100).toFixed(1)
     : 0;
 
-  const getGreeting = () => {
-  const hour = new Date().getHours();
-  if (hour >= 5 && hour < 12) return 'Good Morning';
-  if (hour >= 12 && hour < 17) return 'Good Afternoon';
-  if (hour >= 17 && hour < 21) return 'Good Evening';
-  return 'Good Night';
-  };  
-
   return (
     <div style={styles.container}>
 
-      {/* Header */}
-      <div style={styles.header}>
-        <div>
-          <div style={styles.greeting}>{getGreeting()} 👋</div>
-          <div style={styles.userName}>{user?.name}</div>
+      {/* --- NEW HEADER (Drawer + Greeting + Profile) --- */}
+      <div style={styles.topBar}>
+        <div style={styles.leftSection}>
+          <button onClick={() => setIsDrawerOpen(true)} style={styles.iconBtn}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+          <div>
+            <div style={styles.greeting}>{getGreeting()} 👋</div>
+            <div style={styles.userName}>{user?.name || 'User'}</div>
+          </div>
         </div>
-        <div style={styles.menuHint}>Tap ··· for more options</div>
+
+        <button onClick={() => setIsProfileOpen(!isProfileOpen)} style={styles.profileBtn}>
+          {profilePic ? (
+            <img src={profilePic} alt="Profile" style={styles.profileAvatar} />
+          ) : (
+            <div style={styles.profileAvatar}>
+              {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
+            </div>
+          )}
+        </button>
       </div>
+
+      {/* --- SIDEBAR DRAWER --- */}
+      {isDrawerOpen && <div style={styles.overlay} onClick={() => setIsDrawerOpen(false)} />}
+      <div style={{ ...styles.drawer, transform: isDrawerOpen ? 'translateX(0)' : 'translateX(-100%)' }}>
+        <div style={styles.drawerHeader}>
+          <span style={styles.logoText}>Options</span>
+          <button onClick={() => setIsDrawerOpen(false)} style={styles.closeBtn}>✕</button>
+        </div>
+        <div style={styles.drawerMenu}>
+          <div onClick={() => handleNavigate('/budgets')} style={styles.menuItem}>
+            <span style={styles.menuIcon}>💰</span> Budget Planner
+          </div>
+          <div onClick={() => handleNavigate('/lend')} style={styles.menuItem}>
+            <span style={styles.menuIcon}>🤝</span> Lend, Borrow & Return
+          </div>
+          <div onClick={() => handleNavigate('/categories')} style={styles.menuItem}>
+            <span style={styles.menuIcon}>🏷️</span> Manage Categories
+          </div>
+          <div onClick={() => handleNavigate('/export')} style={styles.menuItem}>
+            <span style={styles.menuIcon}>📥</span> Export Center
+          </div>
+          <div style={styles.divider}></div>
+          <div onClick={logout} style={{ ...styles.menuItem, color: '#ff4757' }}>
+            <span style={styles.menuIcon}>🚪</span> Logout
+          </div>
+        </div>
+      </div>
+
+      {/* --- GMAIL-STYLE PROFILE DROPDOWN --- */}
+      {isProfileOpen && (
+        <>
+          <div style={{...styles.overlay, background: 'transparent'}} onClick={() => setIsProfileOpen(false)} />
+          <div style={styles.profileDropdown}>
+            <div style={styles.profileHeaderRow}>
+              
+              {/* Clickable Profile Picture for Upload */}
+              <label style={styles.profileUploadWrapper}>
+                <input type="file" accept="image/*" onChange={handleImageUpload} style={{ display: 'none' }} />
+                {profilePic ? (
+                  <img src={profilePic} alt="Profile" style={styles.profileAvatarLarge} />
+                ) : (
+                  <div style={styles.profileAvatarLarge}>
+                    {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                  </div>
+                )}
+                <div style={styles.uploadIconBadge}>📷</div>
+              </label>
+
+              <div>
+                <div style={styles.profileNameLarge}>{user?.name || 'User'}</div>
+                <div style={styles.profileEmail}>{user?.email || 'user@example.com'}</div>
+              </div>
+            </div>
+            
+            <button style={styles.manageBtn}>Manage your account</button>
+            <div style={styles.divider}></div>
+            <div style={styles.profileActions}>
+              <div style={styles.actionItem}>➕ Add another account</div>
+              <div onClick={logout} style={styles.actionItem}>🚪 Sign out</div>
+            </div>
+          </div>
+        </>
+      )}
+
 
       {/* Summary Cards */}
       <div style={styles.cardsRow}>
@@ -245,7 +352,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div style={{ height: '20px' }} />
+      <div style={{ height: '80px' }} />
     </div>
   );
 }
@@ -254,9 +361,40 @@ const styles = {
   container: { padding: '20px', background: '#0a0e1a', minHeight: '100vh' },
   loading: { display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0a0e1a' },
   loadingText: { color: '#00f5a0', fontSize: '16px' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', paddingTop: '10px' },
-  greeting: { fontSize: '13px', color: '#8892b0' },
-  userName: { fontSize: '22px', fontWeight: '700', color: '#fff' },
+  
+  // --- NEW HEADER STYLES ---
+  topBar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', paddingTop: '10px' },
+  leftSection: { display: 'flex', alignItems: 'center', gap: '16px' },
+  iconBtn: { background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' },
+  greeting: { fontSize: '13px', color: '#8892b0', marginBottom: '2px' },
+  userName: { fontSize: '22px', fontWeight: '700', color: '#fff', lineHeight: '1' },
+  profileBtn: { background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 },
+  profileAvatar: { width: '44px', height: '44px', borderRadius: '50%', background: 'linear-gradient(135deg, #00f5a0, #0066ff)', color: '#0a0e1a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '18px', objectFit: 'cover' },
+  
+  // --- DRAWER STYLES ---
+  overlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', zIndex: 999 },
+  drawer: { position: 'fixed', top: 0, left: 0, bottom: 0, width: '280px', background: '#1a1f35', zIndex: 1000, transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)', borderRight: '1px solid #2a2f45', display: 'flex', flexDirection: 'column' },
+  drawerHeader: { padding: '24px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #2a2f45' },
+  logoText: { fontSize: '20px', fontWeight: '700', color: '#fff', letterSpacing: '-0.5px' },
+  closeBtn: { background: '#2a2f45', border: 'none', color: '#8892b0', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer', fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  drawerMenu: { padding: '16px 0', overflowY: 'auto' },
+  menuItem: { padding: '16px 24px', fontSize: '15px', color: '#fff', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px' },
+  menuIcon: { fontSize: '18px' },
+  divider: { height: '1px', background: '#2a2f45', margin: '8px 0' },
+
+  // --- PROFILE DROPDOWN STYLES ---
+  profileDropdown: { position: 'absolute', top: '75px', right: '20px', background: '#1a1f35', borderRadius: '16px', width: '320px', border: '1px solid #2a2f45', zIndex: 1000, padding: '16px', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' },
+  profileHeaderRow: { display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' },
+  profileUploadWrapper: { position: 'relative', cursor: 'pointer' },
+  profileAvatarLarge: { width: '56px', height: '56px', borderRadius: '50%', background: 'linear-gradient(135deg, #00f5a0, #0066ff)', color: '#0a0e1a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '24px', objectFit: 'cover' },
+  uploadIconBadge: { position: 'absolute', bottom: '-4px', right: '-4px', background: '#2a2f45', borderRadius: '50%', padding: '4px', fontSize: '10px', border: '2px solid #1a1f35' },
+  profileNameLarge: { fontSize: '16px', fontWeight: '700', color: '#fff' },
+  profileEmail: { fontSize: '13px', color: '#8892b0', marginTop: '2px' },
+  manageBtn: { width: '100%', padding: '10px', background: 'transparent', border: '1px solid #2a2f45', borderRadius: '20px', color: '#fff', fontSize: '13px', fontWeight: '600', cursor: 'pointer', marginBottom: '8px' },
+  profileActions: { paddingTop: '8px' },
+  actionItem: { padding: '12px', fontSize: '14px', color: '#fff', cursor: 'pointer', borderRadius: '8px' },
+
+  // --- ORIGINAL STYLES ---
   logoutBtn: { background: 'transparent', border: '1px solid #2a2f45', color: '#8892b0', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' },
   cardsRow: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' },
   card: { background: '#1a1f35', borderRadius: '16px', padding: '16px', border: '1px solid #2a2f45' },
@@ -290,5 +428,5 @@ const styles = {
   debtorAvatar: { width: '36px', height: '36px', borderRadius: '50%', background: '#2a2f45', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#00f5a0', fontWeight: '700', fontSize: '14px' },
   debtorName: { flex: 1, fontSize: '14px', color: '#fff', fontWeight: '500' },
   debtorAmount: { fontSize: '14px', fontWeight: '700', color: '#ffa502' },
-  menuHint: { fontSize: '12px', color: '#8892b0' },
+  menuHint: { display: 'none' }, // Hiding the old text
 };
