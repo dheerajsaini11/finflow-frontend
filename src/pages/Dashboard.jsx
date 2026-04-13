@@ -126,7 +126,7 @@ export default function Dashboard() {
           <button onClick={() => setIsDrawerOpen(false)} style={styles.closeBtn}>✕</button>
         </div>
         <div style={styles.drawerMenu}>
-          <div onClick={() => handleNavigate('/budgets')} style={styles.menuItem}>
+          <div onClick={() => handleNavigate('/budget')} style={styles.menuItem}>
             <span style={styles.menuIcon}>💰</span> Budget Planner
           </div>
           <div onClick={() => handleNavigate('/lend')} style={styles.menuItem}>
