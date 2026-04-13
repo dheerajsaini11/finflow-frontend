@@ -138,10 +138,6 @@ export default function Dashboard() {
           <div onClick={() => handleNavigate('/export')} style={styles.menuItem}>
             <span style={styles.menuIcon}>📥</span> Export Center
           </div>
-          <div style={styles.divider}></div>
-          <div onClick={logout} style={{ ...styles.menuItem, color: '#ff4757' }}>
-            <span style={styles.menuIcon}>🚪</span> Logout
-          </div>
         </div>
       </div>
 
