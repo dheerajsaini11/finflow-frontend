@@ -146,17 +146,6 @@ export default function Header() {
             <span style={styles.menuIcon}>📥</span> Export Center
           </div>
 
-          <div style={styles.divider}></div>
-          
-          <div 
-            onClick={logout} 
-            style={getMenuItemStyle('/logout', true)}
-            onMouseEnter={() => setHoveredItem('/logout')}
-            onMouseLeave={() => setHoveredItem(null)}
-          >
-            <span style={styles.menuIcon}>🚪</span> Logout
-          </div>
-
         </div>
       </div>
 
