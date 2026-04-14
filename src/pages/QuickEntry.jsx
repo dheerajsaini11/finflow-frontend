@@ -223,16 +223,6 @@ export default function QuickEntry() {
         </div>
       )}
 
-      {/* Today's Spend Card */}
-      {streak === 0 && todayTotal > 0 && (
-        <div style={styles.todayCard}>
-          <span style={styles.todayCardLabel}>Today's Expense</span>
-          <span style={styles.todayCardAmount}>
-            ₹{Number(todayTotal).toLocaleString('en-IN')}
-          </span>
-        </div>
-      )}
-
       {/* Header */}
       <div style={styles.header}>
         <div style={styles.headerTitle}>Quick Entry</div>
