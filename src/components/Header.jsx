@@ -189,10 +189,20 @@ export default function Header() {
               </div>
             </div>
             
-            <button style={styles.manageBtn}>Manage your account</button>
+            {/* Updated Manage Button */}
+            <button 
+              onClick={() => handleNavigate('/settings')} 
+              style={styles.manageBtn}
+            >
+              Manage your account
+            </button>
+
             <div style={styles.divider}></div>
+
             <div style={styles.profileActions}>
+              {/* Updated Add Account Button */}
               <div 
+                onClick={() => handleNavigate('/login?mode=add')} 
                 style={{
                   ...styles.actionItem,
                   background: hoveredItem === 'add_account' ? 'rgba(255,255,255,0.05)' : 'transparent'
