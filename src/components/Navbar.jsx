@@ -119,21 +119,6 @@ export default function Navbar() {
           );
         })}
 
-        {/* More Tab */}
-        <div
-          onClick={() => setShowMore(!showMore)}
-          style={styles.tab}
-        >
-          <span style={styles.icon}>
-            {isMoreActive ? '···' : '···'}
-          </span>
-          <span style={{
-            ...styles.label,
-            color: isMoreActive || showMore ? '#00f5a0' : '#8892b0',
-          }}>
-            More
-          </span>
-        </div>
       </nav>
     </>
   );
