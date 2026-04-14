@@ -60,6 +60,24 @@ export default function Header() {
       transition: 'all 0.2s ease',
     };
 
+  // Change this line to load from storage on refresh
+  const [profilePic, setProfilePic] = useState(localStorage.getItem('user_profile_pic') || null);
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result;
+        setProfilePic(base64String);
+        // Save to local storage so it persists after refresh
+        localStorage.setItem('user_profile_pic', base64String); 
+        toast.success('Profile picture updated!');
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
     if (isLogout) {
       baseStyle.color = '#ff4757';
       baseStyle.background = isHovered ? '#ff475711' : 'transparent';
