@@ -61,7 +61,7 @@ export default function Header() {
     };
 
   // Change this line to load from storage on refresh
-  const [profilePic, setProfilePic] = useState(localStorage.getItem('user_profile_pic') || null);
+  const [profilePic, setProfilePic] = useState(() => localStorage.getItem('user_profile_pic') || null);
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
@@ -191,7 +191,7 @@ export default function Header() {
             
             {/* Updated Manage Button */}
             <button 
-              onClick={() => handleNavigate('/settings')} 
+              onClick={() => handleNavigate('/profile')} 
               style={styles.manageBtn}
             >
               Manage your account
@@ -200,18 +200,6 @@ export default function Header() {
             <div style={styles.divider}></div>
 
             <div style={styles.profileActions}>
-              {/* Updated Add Account Button */}
-              <div 
-                onClick={() => handleNavigate('/login?mode=add')} 
-                style={{
-                  ...styles.actionItem,
-                  background: hoveredItem === 'add_account' ? 'rgba(255,255,255,0.05)' : 'transparent'
-                }}
-                onMouseEnter={() => setHoveredItem('add_account')}
-                onMouseLeave={() => setHoveredItem(null)}
-              >
-                ➕ Add another account
-              </div>
               <div 
                 onClick={logout} 
                 style={{
