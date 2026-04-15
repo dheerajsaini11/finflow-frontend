@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
+import { updateProfilePicture } from '../services/api';
 
 export default function Header() {
   const { user, logout } = useAuth();
@@ -60,23 +61,28 @@ export default function Header() {
       transition: 'all 0.2s ease',
     };
 
-  // Change this line to load from storage on refresh
-  const [profilePic, setProfilePic] = useState(() => localStorage.getItem('user_profile_pic') || null);
+  // Change your useAuth hook to include updateUser:
+  const { user, logout, updateUser } = useAuth();
 
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result;
-        setProfilePic(base64String);
-        // Save to local storage so it persists after refresh
-        localStorage.setItem('user_profile_pic', base64String); 
-        toast.success('Profile picture updated!');
-      };
-      reader.readAsDataURL(file);
-    }
-  };
+  const handleImageUpload = async (e) => {
+      const file = e.target.files;
+      if (file) {
+        const formData = new FormData();
+        formData.append('profile', file); // 'profile' must match upload.single('profile') in the backend
+
+        try {
+          const toastId = toast.loading('Uploading to Supabase...');
+          const res = await updateProfilePicture(formData);
+          
+          // Globally update user context
+          updateUser({ avatars_url: res.data.avatars_url });
+          toast.success('Profile picture updated!', { id: toastId });
+        } catch (error) {
+          toast.dismiss();
+          toast.error('Upload failed. Please try again.');
+        }
+      }
+    };
 
     if (isLogout) {
       baseStyle.color = '#ff4757';
@@ -110,11 +116,11 @@ export default function Header() {
         </div>
 
         <button onClick={() => setIsProfileOpen(!isProfileOpen)} style={styles.profileBtn}>
-          {profilePic ? (
-            <img src={profilePic} alt="Profile" style={styles.profileAvatar} />
+          {user?.avatars_url? (
+            <img src={user.avatars_url} alt="Profile" style={styles.profileAvatar} />
           ) : (
             <div style={styles.profileAvatar}>
-              {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
+              {user?.name? user.name.charAt(0).toUpperCase() : 'U'}
             </div>
           )}
         </button>
@@ -174,11 +180,11 @@ export default function Header() {
             <div style={styles.profileHeaderRow}>
               <label style={styles.profileUploadWrapper}>
                 <input type="file" accept="image/*" onChange={handleImageUpload} style={{ display: 'none' }} />
-                {profilePic ? (
-                  <img src={profilePic} alt="Profile" style={styles.profileAvatarLarge} />
+                {user?.avatars_url? (
+                  <img src={user.avatars_url} alt="Profile" style={styles.profileAvatarLarge} />
                 ) : (
                   <div style={styles.profileAvatarLarge}>
-                    {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                    {user?.name? user.name.charAt(0).toUpperCase() : 'U'}
                   </div>
                 )}
                 <div style={styles.uploadIconBadge}>📷</div>

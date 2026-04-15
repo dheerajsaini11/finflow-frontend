@@ -43,8 +43,15 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  const updateUser = (updatedFields) => {
+    const newUser = {...user,...updatedFields };
+    setUser(newUser);
+    localStorage.setItem('finflow_user', JSON.stringify(newUser));
+  };
+
+  // Update the return statement to include updateUser:
   return (
-    <AuthContext.Provider value={{ user, token, login, register, logout, loading }}>
+    <AuthContext.Provider value={{ user, token, login, register, logout, updateUser, loading }}>
       {children}
     </AuthContext.Provider>
   );

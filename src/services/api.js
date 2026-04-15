@@ -17,6 +17,9 @@ API.interceptors.request.use((config) => {
 export const registerUser = (data) => API.post('/auth/register', data);
 export const loginUser = (data) => API.post('/auth/login', data);
 export const getProfile = () => API.get('/auth/profile');
+export const updateProfilePicture = (data) => API.post('/auth/profile-picture', data, {
+  headers: { 'Content-Type': 'multipart/form-data' }
+});
 
 // Transactions
 export const addTransaction = (data) => API.post('/transactions', data);
