@@ -5,16 +5,12 @@ import toast from 'react-hot-toast';
 import { updateProfilePicture } from '../services/api';
 
 export default function Header() {
-  const { user, logout } = useAuth();
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const { user, logout, updateUser } = useAuth();
+  const = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [profilePic, setProfilePic] = useState(null);
-  
-  // NEW: Track hover state for menu items
   const [hoveredItem, setHoveredItem] = useState(null);
   
   const navigate = useNavigate();
-  // NEW: Get current location to highlight active tab
   const location = useLocation();
 
   const handleNavigate = (path) => {
@@ -23,50 +19,8 @@ export default function Header() {
     navigate(path);
   };
 
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setProfilePic(reader.result);
-        toast.success('Profile picture updated!');
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour >= 5 && hour < 12) return 'Good Morning';
-    if (hour >= 12 && hour < 17) return 'Good Afternoon';
-    if (hour >= 17 && hour < 21) return 'Good Evening';
-    return 'Good Night';
-  };
-
-  // NEW: Helper function to generate dynamic styles for menu items
-  const getMenuItemStyle = (path, isLogout = false) => {
-    const isActive = location.pathname === path;
-    const isHovered = hoveredItem === path;
-    
-    let baseStyle = {
-      padding: '16px 24px',
-      fontSize: '15px',
-      fontWeight: '600',
-      cursor: 'pointer',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '12px',
-      borderRadius: '12px', // Added border radius for nice hover effect
-      margin: '4px 12px',   // Added margin to float it slightly inside the drawer
-      transition: 'all 0.2s ease',
-    };
-
-  // Change your useAuth hook to include updateUser:
-  const { user, logout, updateUser } = useAuth();
-
   const handleImageUpload = async (e) => {
-    // Array ka first file select karne ke liye  lagana zaroori hai
-    const file = e.target.files; 
+    const file = e.target.files;
     
     if (file) {
       const formData = new FormData();
@@ -86,14 +40,37 @@ export default function Header() {
     }
   };
 
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 12) return 'Good Morning';
+    if (hour >= 12 && hour < 17) return 'Good Afternoon';
+    if (hour >= 17 && hour < 21) return 'Good Evening';
+    return 'Good Night';
+  };
+
+  const getMenuItemStyle = (path, isLogout = false) => {
+    const isActive = location.pathname === path;
+    const isHovered = hoveredItem === path;
+    
+    let baseStyle = {
+      padding: '16px 24px',
+      fontSize: '15px',
+      fontWeight: '600',
+      cursor: 'pointer',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '12px',
+      borderRadius: '12px',
+      margin: '4px 12px',
+      transition: 'all 0.2s ease',
+    };
+
     if (isLogout) {
       baseStyle.color = '#ff4757';
-      baseStyle.background = isHovered ? '#ff475711' : 'transparent';
+      baseStyle.background = isHovered? '#ff475711' : 'transparent';
     } else {
-      baseStyle.color = isActive ? '#00f5a0' : (isHovered ? '#fff' : '#8892b0');
-      // Glass effect on hover/active
-      baseStyle.background = isActive ? 'rgba(0, 245, 160, 0.1)' : (isHovered ? 'rgba(255, 255, 255, 0.05)' : 'transparent');
-      // Slight border for active state
+      baseStyle.color = isActive? '#00f5a0' : (isHovered? '#fff' : '#8892b0');
+      baseStyle.background = isActive? 'rgba(0, 245, 160, 0.1)' : (isHovered? 'rgba(255, 255, 255, 0.05)' : 'transparent');
       if (isActive) baseStyle.border = '1px solid rgba(0, 245, 160, 0.2)';
     }
 
@@ -113,7 +90,9 @@ export default function Header() {
           </button>
           <div>
             <div style={styles.greeting}>{getGreeting()} 👋</div>
-            <div style={styles.userName}>{user?.name || 'User'}</div>
+            <div style={styles.userName}>{user?.name |
+
+| 'User'}</div>
           </div>
         </div>
 
@@ -129,7 +108,7 @@ export default function Header() {
       </div>
 
       {isDrawerOpen && <div style={styles.overlay} onClick={() => setIsDrawerOpen(false)} />}
-      <div style={{ ...styles.drawer, transform: isDrawerOpen ? 'translateX(0)' : 'translateX(-100%)' }}>
+      <div style={{...styles.drawer, transform: isDrawerOpen? 'translateX(0)' : 'translateX(-100%)' }}>
         <div style={styles.drawerHeader}>
           <span style={styles.logoText}>Options</span>
           <button onClick={() => setIsDrawerOpen(false)} style={styles.closeBtn}>✕</button>
@@ -192,12 +171,15 @@ export default function Header() {
                 <div style={styles.uploadIconBadge}>📷</div>
               </label>
               <div>
-                <div style={styles.profileNameLarge}>{user?.name || 'User'}</div>
-                <div style={styles.profileEmail}>{user?.email || 'user@example.com'}</div>
+                <div style={styles.profileNameLarge}>{user?.name |
+
+| 'User'}</div>
+                <div style={styles.profileEmail}>{user?.email |
+
+| 'user@example.com'}</div>
               </div>
             </div>
             
-            {/* Updated Manage Button */}
             <button 
               onClick={() => handleNavigate('/profile')} 
               style={styles.manageBtn}
@@ -211,8 +193,8 @@ export default function Header() {
               <div 
                 onClick={logout} 
                 style={{
-                  ...styles.actionItem,
-                  background: hoveredItem === 'sign_out' ? '#ff475711' : 'transparent',
+                 ...styles.actionItem,
+                  background: hoveredItem === 'sign_out'? '#ff475711' : 'transparent',
                   color: '#ff4757'
                 }}
                 onMouseEnter={() => setHoveredItem('sign_out')}
@@ -236,7 +218,6 @@ const styles = {
   userName: { fontSize: '22px', fontWeight: '700', color: '#fff', lineHeight: '1' },
   profileBtn: { background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 },
   profileAvatar: { width: '44px', height: '44px', borderRadius: '50%', background: 'linear-gradient(135deg, #00f5a0, #0066ff)', color: '#0a0e1a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '18px', objectFit: 'cover' },
-  
   overlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', zIndex: 999 },
   drawer: { position: 'fixed', top: 0, left: 0, bottom: 0, width: '280px', background: '#1a1f35', zIndex: 1000, transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)', borderRight: '1px solid #2a2f45', display: 'flex', flexDirection: 'column' },
   drawerHeader: { padding: '24px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #2a2f45', marginBottom: '8px' },
@@ -245,7 +226,6 @@ const styles = {
   drawerMenu: { padding: '8px 0', overflowY: 'auto' },
   menuIcon: { fontSize: '18px' },
   divider: { height: '1px', background: '#2a2f45', margin: '16px 20px' },
-
   profileDropdown: { position: 'absolute', top: '75px', right: '20px', background: '#1a1f35', borderRadius: '16px', width: '320px', border: '1px solid #2a2f45', zIndex: 1000, padding: '16px', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' },
   profileHeaderRow: { display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' },
   profileUploadWrapper: { position: 'relative', cursor: 'pointer' },
