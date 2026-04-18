@@ -65,24 +65,26 @@ export default function Header() {
   const { user, logout, updateUser } = useAuth();
 
   const handleImageUpload = async (e) => {
-      const file = e.target.files;
-      if (file) {
-        const formData = new FormData();
-        formData.append('profile', file); // 'profile' must match upload.single('profile') in the backend
+    // Exactly target the first file in the array by adding  here:
+    const file = e.target.files; 
+    
+    if (file) {
+      const formData = new FormData();
+      formData.append('profile', file); 
 
-        try {
-          const toastId = toast.loading('Uploading to Supabase...');
-          const res = await updateProfilePicture(formData);
-          
-          // Globally update user context
-          updateUser({ avatars_url: res.data.avatars_url });
-          toast.success('Profile picture updated!', { id: toastId });
-        } catch (error) {
-          toast.dismiss();
-          toast.error('Upload failed. Please try again.');
-        }
+      try {
+        const toastId = toast.loading('Uploading to Supabase...');
+        const res = await updateProfilePicture(formData);
+        
+        // Globally update user context
+        updateUser({ avatars_url: res.data.avatars_url });
+        toast.success('Profile picture updated!', { id: toastId });
+      } catch (error) {
+        toast.dismiss();
+        toast.error('Upload failed. Please try again.');
       }
-    };
+    }
+  };
 
     if (isLogout) {
       baseStyle.color = '#ff4757';
