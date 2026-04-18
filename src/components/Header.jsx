@@ -65,7 +65,7 @@ export default function Header() {
   const { user, logout, updateUser } = useAuth();
 
   const handleImageUpload = async (e) => {
-    // Exactly target the first file in the array by adding  here:
+    // Array ka first file select karne ke liye  lagana zaroori hai
     const file = e.target.files; 
     
     if (file) {
