@@ -6,7 +6,9 @@ import { updateProfilePicture } from '../services/api';
 
 export default function Header() {
   const { user, logout, updateUser } = useAuth();
-  const = useState(false);
+  
+  // ALL STATES PROPERLY DECLARED
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [hoveredItem, setHoveredItem] = useState(null);
   
@@ -20,7 +22,8 @@ export default function Header() {
   };
 
   const handleImageUpload = async (e) => {
-    const file = e.target.files;
+    // Array ka first file access karna zaroori hai
+    const file = e.target.files.item(0);
     
     if (file) {
       const formData = new FormData();
@@ -90,9 +93,7 @@ export default function Header() {
           </button>
           <div>
             <div style={styles.greeting}>{getGreeting()} 👋</div>
-            <div style={styles.userName}>{user?.name |
-
-| 'User'}</div>
+            <div style={styles.userName}>{user?.name || 'User'}</div>
           </div>
         </div>
 
@@ -171,12 +172,8 @@ export default function Header() {
                 <div style={styles.uploadIconBadge}>📷</div>
               </label>
               <div>
-                <div style={styles.profileNameLarge}>{user?.name |
-
-| 'User'}</div>
-                <div style={styles.profileEmail}>{user?.email |
-
-| 'user@example.com'}</div>
+                <div style={styles.profileNameLarge}>{user?.name || 'User'}</div>
+                <div style={styles.profileEmail}>{user?.email || 'user@example.com'}</div>
               </div>
             </div>
             
