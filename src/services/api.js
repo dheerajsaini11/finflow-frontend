@@ -20,6 +20,8 @@ export const getProfile = () => API.get('/auth/profile');
 export const updateProfilePicture = (data) => API.post('/auth/profile-picture', data, {
   headers: { 'Content-Type': 'multipart/form-data' }
 });
+export const updateProfileName = (data) => API.put('/auth/update-name', data);
+export const deleteAccount = (data) => API.delete('/auth/delete-account', { data });
 
 // Transactions
 export const addTransaction = (data) => API.post('/transactions', data);
