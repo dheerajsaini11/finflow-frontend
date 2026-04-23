@@ -25,12 +25,22 @@ const DISPLAY_NAMES = {
   debt: 'Lend / Borrow',
 };
 
+// Read preference from localStorage, fall back to 'expense' if invalid
+const getDefaultType = () => {
+  const saved = localStorage.getItem('finflow_default_tx_type');
+  // 'debt' is the internal key for lend in QuickEntry
+  // map 'lend' (stored by Profile prefs) → 'debt' (used internally here)
+  if (saved === 'lend') return 'debt';
+  if (TYPES.includes(saved)) return saved;
+  return 'expense';
+};
+
 export default function QuickEntry() {
   const today = new Date().toISOString().split('T')[0];
 
-  const [type, setType] = useState('expense');
-  const [debtAction, setDebtAction] = useState('lend'); // 'lend', 'borrow', or 'return'
-  
+  const [type, setType] = useState(getDefaultType);   // ← FIX: reads preference
+  const [debtAction, setDebtAction] = useState('lend');
+
   const [amount, setAmount] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [note, setNote] = useState('');
@@ -55,7 +65,7 @@ export default function QuickEntry() {
         expense: 'expense',
         income: 'income',
         investment: 'investment',
-        debt: 'expense', 
+        debt: 'expense',
       };
       const res = await getCategories({ type: typeMap[type] });
       setCategories(res.data.categories);
@@ -153,7 +163,7 @@ export default function QuickEntry() {
       const selectedCat = categories.find(
         c => String(c.id) === String(categoryId)
       );
-      
+
       let actionText = '';
       if (type === 'debt') {
         if (debtAction === 'lend') actionText = 'Lent to';
@@ -161,7 +171,7 @@ export default function QuickEntry() {
         if (debtAction === 'return') actionText = 'Returned/Settled with';
       }
 
-      const successMsg = type === 'debt' 
+      const successMsg = type === 'debt'
         ? `✅ ₹${Number(amount).toLocaleString('en-IN')} ${actionText} ${personName}`
         : `✅ ${selectedCat?.icon || ''} ₹${Number(amount).toLocaleString('en-IN')} logged`;
 
@@ -172,7 +182,7 @@ export default function QuickEntry() {
       setPersonName('');
       setDate(today);
       setCategoryId('');
-      setDebtAction('lend'); 
+      setDebtAction('lend');
 
       fetchStreak();
       fetchTodayTotal();
@@ -247,7 +257,7 @@ export default function QuickEntry() {
         ))}
       </div>
 
-      {/* Horizontal Date and Category Row */}
+      {/* Date and Category Row */}
       <div style={styles.row}>
         <div style={styles.field}>
           <label style={styles.label}>DATE</label>
@@ -298,7 +308,7 @@ export default function QuickEntry() {
         </div>
       </div>
 
-      {/* Person Name (Only visible when Lend/Borrow is selected) */}
+      {/* Person Name (Only for debt) */}
       {type === 'debt' && (
         <div style={styles.fullField}>
           <label style={styles.label}>PERSON NAME</label>
@@ -387,23 +397,14 @@ const styles = {
   streakFire: { fontSize: '32px' },
   streakText: { fontSize: '15px', fontWeight: '700', color: '#ffa502' },
   streakSub: { fontSize: '12px', color: '#8892b0', marginTop: '2px' },
-  todayTotal: { marginLeft: 'auto', textAlign: 'right' },
-  todayLabel: { fontSize: '10px', color: '#8892b0', fontWeight: '600' },
-  todayAmount: { fontSize: '16px', fontWeight: '700', color: '#ff4757' },
-  todayCard: { background: '#1a1f35', border: '1px solid #2a2f45', borderRadius: '12px', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' },
-  todayCardLabel: { fontSize: '13px', color: '#8892b0' },
-  todayCardAmount: { fontSize: '16px', fontWeight: '700', color: '#ff4757' },
   header: { marginBottom: '16px' },
   headerTitle: { fontSize: '24px', fontWeight: '700', color: '#fff' },
   headerSub: { fontSize: '13px', color: '#8892b0', marginTop: '4px' },
   typeRow: { display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' },
   typeBtn: { padding: '8px 14px', borderRadius: '20px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s' },
-  
-  // Restored the exact horizontal layout
   row: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' },
   field: { display: 'flex', flexDirection: 'column', gap: '6px' },
   fullField: { display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px' },
-  
   label: { fontSize: '11px', color: '#8892b0', fontWeight: '600', letterSpacing: '0.5px' },
   input: { padding: '10px 12px', background: '#1a1f35', border: '1px solid #2a2f45', borderRadius: '10px', color: '#fff', fontSize: '14px', outline: 'none', width: '100%' },
   amountContainer: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '20px 0 12px' },

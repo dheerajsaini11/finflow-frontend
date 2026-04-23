@@ -8,7 +8,10 @@ import {
 } from 'recharts';
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+// Week day labels: Sunday-start vs Monday-start
+const WEEKDAYS_SUN = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const WEEKDAYS_MON = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
 export default function Analytics() {
   const [data, setData] = useState(null);
@@ -16,6 +19,11 @@ export default function Analytics() {
   const [year, setYear] = useState(new Date().getFullYear());
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [loading, setLoading] = useState(true);
+
+  // Read week start preference from localStorage
+  const weekStart = localStorage.getItem('finflow_week_start') || 'monday';
+  const startsOnMonday = weekStart === 'monday';
+  const WEEKDAYS = startsOnMonday ? WEEKDAYS_MON : WEEKDAYS_SUN;
 
   useEffect(() => {
     fetchAnalytics();
@@ -25,7 +33,7 @@ export default function Analytics() {
     setLoading(true);
     try {
       const lastDay = new Date(year, month, 0).getDate();
-      
+
       const [analyticsRes, txsRes] = await Promise.all([
         getYearlyAnalytics({ year, month }),
         getTransactions({
@@ -59,7 +67,7 @@ export default function Analytics() {
     color: c.color || '#6c5ce7',
   })) || [];
 
-  // Local Monthly Heatmap Logic (For the Calendar)
+  // Monthly Heatmap
   const monthlyHeatmapData = {};
   if (monthTxs?.length > 0) {
     monthTxs.forEach(tx => {
@@ -79,11 +87,23 @@ export default function Analytics() {
     return '#ffcdd2';
   };
 
+  // Calendar grid — respects week start preference
   const getMonthlyCalendar = () => {
     const daysInMonth = new Date(year, month, 0).getDate();
-    const firstDay = new Date(year, month - 1, 1).getDay(); // 0 = Sun, 6 = Sat
+    // getDay() returns 0=Sun, 1=Mon ... 6=Sat
+    const firstDayOfWeek = new Date(year, month - 1, 1).getDay();
 
-    const blanks = Array(firstDay).fill(null);
+    // Calculate leading blank cells
+    let blanksCount;
+    if (startsOnMonday) {
+      // Monday=0 in our grid, so: Mon→0 blanks, Tue→1, ..., Sun→6
+      blanksCount = (firstDayOfWeek + 6) % 7;
+    } else {
+      // Sunday=0 in our grid
+      blanksCount = firstDayOfWeek;
+    }
+
+    const blanks = Array(blanksCount).fill(null);
     const days = Array.from({ length: daysInMonth }, (_, i) => {
       return `${year}-${String(month).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`;
     });
@@ -91,7 +111,7 @@ export default function Analytics() {
     return [...blanks, ...days];
   };
 
-  // Calculations: Peak Spend & Heavyweight
+  // Insights
   let heavyweight = null;
   let heavyweightPct = 0;
   if (data?.categoryBreakdown?.length > 0) {
@@ -110,9 +130,7 @@ export default function Analytics() {
   }
 
   if (loading) {
-    return (
-      <div style={styles.loading}>Loading analytics...</div>
-    );
+    return <div style={styles.loading}>Loading analytics...</div>;
   }
 
   return (
@@ -161,8 +179,8 @@ export default function Analytics() {
             {peakSpend ? formatAmount(peakSpend.amount) : '₹0'}
           </div>
           <div style={styles.insightSubtext}>
-            {peakSpend 
-              ? `${peakSpend.category_name || 'Expense'} - ${new Date(peakSpend.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}` 
+            {peakSpend
+              ? `${peakSpend.category_name || 'Expense'} - ${new Date(peakSpend.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}`
               : 'No expenses this month'}
           </div>
         </div>
@@ -179,7 +197,7 @@ export default function Analytics() {
         </div>
       </div>
 
-      {/* MERGED CARD: Category Breakdown + Monthly Calendar Heatmap */}
+      {/* Monthly Insights — Pie + Heatmap */}
       <div style={styles.card}>
         <div style={styles.cardHeader}>
           <div style={styles.cardTitle}>Monthly Insights</div>
@@ -195,7 +213,7 @@ export default function Analytics() {
         </div>
 
         <div style={styles.mergedCardContent}>
-          {/* Left/Top: Pie Chart */}
+          {/* Pie Chart */}
           <div style={styles.pieSection}>
             {pieData.length === 0 ? (
               <div style={styles.empty}>No expense data for this month</div>
@@ -204,7 +222,6 @@ export default function Analytics() {
                 <div style={styles.pieWrapper}>
                   <ResponsiveContainer width="100%" height={220}>
                     <PieChart>
-                      {/* Using percentages for responsive scaling */}
                       <Pie data={pieData} cx="50%" cy="50%" innerRadius="55%" outerRadius="80%" dataKey="value">
                         {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                       </Pie>
@@ -229,9 +246,14 @@ export default function Analytics() {
             )}
           </div>
 
-          {/* Right/Bottom: Monthly Calendar Heatmap */}
+          {/* Calendar Heatmap — week start aware */}
           <div style={styles.calendarContainer}>
-            <div style={styles.calendarSubTitle}>Spending Intensity</div>
+            <div style={styles.calendarSubTitle}>
+              Spending Intensity
+              {startsOnMonday
+                ? ' (Mon–Sun)'
+                : ' (Sun–Sat)'}
+            </div>
             <div style={styles.calendarHeaderRow}>
               {WEEKDAYS.map((day, i) => (
                 <div key={i} style={styles.calendarDayLabel}>{day}</div>
@@ -242,7 +264,7 @@ export default function Analytics() {
                 if (!dayStr) return <div key={i} style={styles.calendarCellEmpty} />;
                 const dayNum = parseInt(dayStr.split('-')[2]);
                 const spend = monthlyHeatmapData[dayStr];
-                
+
                 return (
                   <div
                     key={i}
@@ -262,7 +284,7 @@ export default function Analytics() {
         </div>
       </div>
 
-      {/* Compare Bar Chart */}
+      {/* Bar Chart */}
       <div style={styles.card}>
         <div style={styles.cardTitle}>Monthly Comparison</div>
         <ResponsiveContainer width="100%" height={200}>
@@ -298,7 +320,6 @@ const styles = {
   card: { background: '#1a1f35', borderRadius: '16px', padding: '20px', marginBottom: '16px', border: '1px solid #2a2f45' },
   cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' },
   cardTitle: { fontSize: '16px', fontWeight: '700', color: '#fff', marginBottom: '8px' },
-  
   insightsRow: { display: 'flex', gap: '16px', marginBottom: '16px' },
   insightCard: { flex: 1, background: '#1a1f35', borderRadius: '16px', padding: '20px', border: '1px solid #2a2f45', display: 'flex', flexDirection: 'column' },
   insightIconOrange: { width: '32px', height: '32px', background: '#ffa50222', color: '#ffa502', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', marginBottom: '12px' },
@@ -306,25 +327,16 @@ const styles = {
   insightLabel: { fontSize: '10px', fontWeight: '800', color: '#8892b0', letterSpacing: '0.5px', marginBottom: '8px' },
   insightValue: { fontSize: '22px', fontWeight: '700', color: '#fff', marginBottom: '4px' },
   insightSubtext: { fontSize: '12px', color: '#8892b0' },
-
   monthSelect: { background: '#0a0e1a', border: '1px solid #2a2f45', color: '#fff', padding: '6px 10px', borderRadius: '8px', fontSize: '13px', outline: 'none' },
   empty: { color: '#8892b0', textAlign: 'center', padding: '20px', width: '100%' },
-  
-  // --- Merged Card Layout Styles ---
   mergedCardContent: { display: 'flex', flexWrap: 'wrap', gap: '40px', alignItems: 'center' },
-  
-  // Added flexWrap and gap to allow legend to drop below on mobile
   pieSection: { flex: 1, minWidth: '280px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: '20px' },
-  pieWrapper: { flex: '1 1 200px', maxWidth: '300px', width: '100%' }, 
-  
-  // Added minWidth to force wrap on tiny screens
+  pieWrapper: { flex: '1 1 200px', maxWidth: '300px', width: '100%' },
   legend: { flex: '1 1 150px', minWidth: '150px', display: 'flex', flexDirection: 'column', gap: '8px' },
   legendItem: { display: 'flex', alignItems: 'center', gap: '8px' },
   legendDot: { width: '10px', height: '10px', borderRadius: '50%', flexShrink: 0 },
   legendName: { fontSize: '12px', color: '#fff', flex: 1 },
   legendPct: { fontSize: '12px', color: '#8892b0', fontWeight: '600' },
-
-  // Calendar Heatmap Styles
   calendarContainer: { flex: 1, minWidth: '280px', display: 'flex', flexDirection: 'column', background: '#0a0e1a', padding: '16px', borderRadius: '12px', border: '1px solid #2a2f45' },
   calendarSubTitle: { fontSize: '12px', fontWeight: '700', color: '#8892b0', marginBottom: '12px', textAlign: 'center', letterSpacing: '0.5px' },
   calendarHeaderRow: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', marginBottom: '8px', textAlign: 'center' },
