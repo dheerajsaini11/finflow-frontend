@@ -10,29 +10,17 @@ import {
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const MONTHS_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
-// Week labels for each start day
 const WEEKDAYS_MON = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 const WEEKDAYS_SUN = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-// ── GitHub-style heatmap colour scale (5 tiers) ──────────────────────────────
 const getHeatColor = (val, max) => {
   if (!val || val === 0) return '#1e2440';
   const ratio = val / max;
-  if (ratio > 0.8)  return '#ff2d3b'; // darkest red
+  if (ratio > 0.8)  return '#ff2d3b';
   if (ratio > 0.6)  return '#ff4757';
   if (ratio > 0.4)  return '#ff6b7a';
   if (ratio > 0.15) return '#ff9fa8';
-  return '#ffd0d4';                    // lightest pink
-};
-
-// Tooltip for heatmap cells
-const HeatTooltip = ({ dayStr, spend, formatAmount }) => {
-  if (!dayStr) return null;
-  const date = new Date(dayStr);
-  const label = date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', weekday: 'short' });
-  return spend
-    ? `${label}\n${formatAmount(spend)}`
-    : `${label}\nNo spending`;
+  return '#ffd0d4';
 };
 
 export default function Analytics() {
@@ -41,11 +29,11 @@ export default function Analytics() {
   const [year, setYear]         = useState(new Date().getFullYear());
   const [month, setMonth]       = useState(new Date().getMonth() + 1);
   const [loading, setLoading]   = useState(true);
-  const [tooltip, setTooltip]   = useState(null); // { x, y, text }
+  const [tooltip, setTooltip]   = useState(null);
 
-  const weekStart     = localStorage.getItem('finflow_week_start') || 'monday';
+  const weekStart      = localStorage.getItem('finflow_week_start') || 'monday';
   const startsOnMonday = weekStart === 'monday';
-  const WEEKDAYS      = startsOnMonday ? WEEKDAYS_MON : WEEKDAYS_SUN;
+  const WEEKDAYS       = startsOnMonday ? WEEKDAYS_MON : WEEKDAYS_SUN;
 
   useEffect(() => { fetchAnalytics(); }, [year, month]);
 
@@ -79,7 +67,6 @@ export default function Analytics() {
     Investment: m.investment,
   })) || [];
 
-  // Filter out null-name categories (deleted categories with SET NULL)
   const pieData = (data?.categoryBreakdown || [])
     .filter(c => c.name)
     .map(c => ({
@@ -89,7 +76,6 @@ export default function Analytics() {
       icon: c.icon || '📦',
     }));
 
-  // ── Monthly heatmap data ──────────────────────────────────────────────────
   const heatmapData = {};
   monthTxs.forEach(tx => {
     if (tx.type === 'expense') {
@@ -99,23 +85,20 @@ export default function Analytics() {
   });
   const maxHeat = Math.max(...Object.values(heatmapData), 1);
 
-  // ── Calendar grid (week-start-aware) ────────────────────────────────────
   const buildCalendar = () => {
     const daysInMonth  = new Date(year, month, 0).getDate();
-    const firstWeekDay = new Date(year, month - 1, 1).getDay(); // 0=Sun
+    const firstWeekDay = new Date(year, month - 1, 1).getDay();
     const blanks = startsOnMonday
       ? (firstWeekDay + 6) % 7
       : firstWeekDay;
-    const cells = [
+    return [
       ...Array(blanks).fill(null),
       ...Array.from({ length: daysInMonth }, (_, i) =>
         `${year}-${String(month).padStart(2,'0')}-${String(i+1).padStart(2,'0')}`
       ),
     ];
-    return cells;
   };
 
-  // ── Insight calculations ──────────────────────────────────────────────────
   const sortedCats = [...(data?.categoryBreakdown || [])]
     .filter(c => c.name)
     .sort((a, b) => Number(b.total) - Number(a.total));
@@ -204,7 +187,7 @@ export default function Analytics() {
           </select>
         </div>
 
-        {/* ── Pie + Legend side by side ─────────────────────────────── */}
+        {/* ── Pie + Legend ──────────────────────────────────────────────── */}
         {pieData.length === 0 ? (
           <div style={s.emptyState}>
             <div style={s.emptyIcon}>📊</div>
@@ -231,14 +214,13 @@ export default function Analytics() {
                   />
                 </PieChart>
               </ResponsiveContainer>
-              {/* Centre label */}
               <div style={s.donutCenter}>
                 <div style={s.donutCenterAmt}>{fmt(pieTotalVal)}</div>
                 <div style={s.donutCenterLbl}>total spent</div>
               </div>
             </div>
 
-            {/* Legend — 2-column grid */}
+            {/* Legend */}
             <div style={s.legendGrid}>
               {pieData.map((item, i) => {
                 const pct = pieTotalVal > 0 ? ((item.value / pieTotalVal) * 100).toFixed(1) : 0;
@@ -259,7 +241,7 @@ export default function Analytics() {
           </div>
         )}
 
-        {/* ── GitHub-style heatmap ────────────────────────────────────── */}
+        {/* ── Heatmap ─────────────────────────────────────────────────── */}
         <div style={s.heatmapSection}>
           <div style={s.heatmapTitleRow}>
             <span style={s.heatmapTitle}>Spending Intensity — {MONTHS_FULL[month-1]} {year}</span>
@@ -272,9 +254,8 @@ export default function Analytics() {
             </div>
           </div>
 
-          {/* Day labels */}
           <div style={s.heatGrid}>
-            {/* Weekday labels column */}
+            {/* Weekday labels */}
             <div style={s.heatDayLabels}>
               {WEEKDAYS.map((d, i) => (
                 <div key={i} style={s.heatDayLabel}>{d}</div>
@@ -285,7 +266,7 @@ export default function Analytics() {
             <div style={s.heatCells}>
               {calendarCells.map((dayStr, i) => {
                 if (!dayStr) return <div key={i} style={s.heatCellEmpty} />;
-                const spend = heatmapData[dayStr];
+                const spend  = heatmapData[dayStr];
                 const dayNum = parseInt(dayStr.split('-')[2]);
                 const isToday = dayStr === new Date().toISOString().split('T')[0];
                 return (
@@ -297,7 +278,7 @@ export default function Analytics() {
                       border: isToday ? '2px solid #00f5a0' : '1px solid #ffffff08',
                     }}
                     onMouseEnter={e => {
-                      const date = new Date(dayStr);
+                      const date  = new Date(dayStr);
                       const label = date.toLocaleDateString('en-IN',{ weekday:'short', day:'numeric', month:'short' });
                       setTooltip({
                         x: e.clientX, y: e.clientY,
@@ -306,14 +287,19 @@ export default function Analytics() {
                     }}
                     onMouseLeave={() => setTooltip(null)}
                   >
-                    <span style={s.heatCellNum}>{dayNum}</span>
+                    {/* BLACK number on coloured cells, dim white on empty cells */}
+                    <span style={{
+                      ...s.heatCellNum,
+                      color: spend ? '#111' : 'rgba(255,255,255,0.55)',
+                    }}>
+                      {dayNum}
+                    </span>
                   </div>
                 );
               })}
             </div>
           </div>
 
-          {/* Tooltip */}
           {tooltip && (
             <div style={{
               ...s.heatTooltip,
@@ -364,12 +350,10 @@ const s = {
   loadingDot:  { width: '40px', height: '40px', borderRadius: '50%', background: 'linear-gradient(135deg,#00f5a0,#0066ff)', animation: 'pulse 1.5s infinite' },
   loadingText: { color: '#8892b0', fontSize: '14px' },
 
-  // Header
   pageHeader:  { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', paddingTop: '10px' },
   pageTitle:   { fontSize: '24px', fontWeight: '700', color: '#fff' },
   pageSub:     { fontSize: '13px', color: '#8892b0', marginTop: '2px' },
 
-  // Cards
   card:        { background: '#1a1f35', borderRadius: '16px', padding: '20px', marginBottom: '16px', border: '1px solid #2a2f45' },
   cardTitleRow:{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' },
   cardTitle:   { fontSize: '16px', fontWeight: '700', color: '#fff' },
@@ -377,14 +361,12 @@ const s = {
 
   select:      { background: '#0a0e1a', border: '1px solid #2a2f45', color: '#fff', padding: '7px 12px', borderRadius: '10px', fontSize: '13px', outline: 'none', cursor: 'pointer' },
 
-  // Insight cards
   insightRow:  { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' },
   insightCard: { background: '#1a1f35', borderRadius: '16px', padding: '18px 16px', border: '1px solid #2a2f45' },
   insightBadge:{ display: 'inline-block', fontSize: '10px', fontWeight: '700', letterSpacing: '0.6px', padding: '4px 10px', borderRadius: '20px', marginBottom: '12px' },
   insightMain: { fontSize: '20px', fontWeight: '700', color: '#fff', marginBottom: '4px', lineHeight: 1.2 },
   insightSub:  { fontSize: '12px', color: '#8892b0', lineHeight: 1.4 },
 
-  // Pie section
   emptyState:  { textAlign: 'center', padding: '40px 20px' },
   emptyIcon:   { fontSize: '36px', marginBottom: '12px' },
   emptyText:   { fontSize: '14px', color: '#8892b0' },
@@ -419,7 +401,8 @@ const s = {
     gap: '10px',
     alignContent: 'start',
   },
-  legendItem:    { display: 'flex', alignItems: 'flex-start', gap: '10px' },
+  // FIX 1: marginBottom: '8px' added so text below each item has breathing room
+  legendItem:    { display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '8px' },
   legendSwatch:  { width: '12px', height: '12px', borderRadius: '3px', flexShrink: 0, marginTop: '3px' },
   legendDetails: { flex: 1, minWidth: 0 },
   legendName:    { fontSize: '13px', color: '#fff', fontWeight: '500', marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
@@ -427,7 +410,6 @@ const s = {
   legendAmt:     { fontSize: '12px', color: '#8892b0' },
   legendPct:     { fontSize: '12px', fontWeight: '700' },
 
-  // Heatmap
   heatmapSection: { position: 'relative' },
   heatmapTitleRow:{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' },
   heatmapTitle:   { fontSize: '13px', fontWeight: '600', color: '#8892b0' },
@@ -435,28 +417,31 @@ const s = {
   heatLegendLbl:  { fontSize: '11px', color: '#8892b0' },
   heatLegendCell: { width: '13px', height: '13px', borderRadius: '3px' },
 
-  // Grid: day-labels col + cells
   heatGrid: { display: 'flex', gap: '6px', alignItems: 'flex-start', overflowX: 'auto' },
+
+  // FIX 3a: use fixed 28px rows so labels align with cells
   heatDayLabels: {
     display: 'grid',
-    gridTemplateRows: 'repeat(7, 1fr)',
+    gridTemplateRows: 'repeat(7, 28px)',
     gap: '4px',
     flexShrink: 0,
     paddingTop: '2px',
   },
-  heatDayLabel: { fontSize: '10px', color: '#8892b0', height: '28px', display: 'flex', alignItems: 'center', paddingRight: '4px', fontWeight: '600', whiteSpace: 'nowrap' },
+  heatDayLabel: { fontSize: '10px', color: '#8892b0', display: 'flex', alignItems: 'center', paddingRight: '4px', fontWeight: '600', whiteSpace: 'nowrap' },
+
+  // FIX 3b: gridTemplateRows drives 7 day-rows; weeks auto-create columns via gridAutoColumns
   heatCells: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(7, 1fr)',
-    gridAutoFlow: 'column',  // fill column-by-column like GitHub
+    gridTemplateRows: 'repeat(7, 28px)',
+    gridAutoFlow: 'column',
+    gridAutoColumns: '28px',
     gap: '4px',
-    flex: 1,
   },
+
+  // FIX 3c: fixed size instead of fluid width/aspectRatio
   heatCell: {
-    width: '100%',
-    aspectRatio: '1',
-    minWidth: '28px',
-    maxWidth: '42px',
+    width: '28px',
+    height: '28px',
     borderRadius: '5px',
     display: 'flex',
     alignItems: 'center',
@@ -465,16 +450,15 @@ const s = {
     transition: 'transform 0.1s',
   },
   heatCellEmpty: {
-    width: '100%',
-    aspectRatio: '1',
-    minWidth: '28px',
-    maxWidth: '42px',
+    width: '28px',
+    height: '28px',
     borderRadius: '5px',
     background: 'transparent',
   },
-  heatCellNum: { fontSize: '10px', fontWeight: '600', color: 'rgba(255,255,255,0.6)', userSelect: 'none' },
 
-  // Hover tooltip
+  // Base color; overridden inline per cell (FIX 2)
+  heatCellNum: { fontSize: '10px', fontWeight: '600', userSelect: 'none' },
+
   heatTooltip: {
     position: 'fixed',
     background: '#1a1f35',
