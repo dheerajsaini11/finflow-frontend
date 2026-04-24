@@ -8,51 +8,69 @@ import {
 } from 'recharts';
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const MONTHS_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
-// Week day labels: Sunday-start vs Monday-start
-const WEEKDAYS_SUN = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-const WEEKDAYS_MON = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+// Week labels for each start day
+const WEEKDAYS_MON = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const WEEKDAYS_SUN = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+// ── GitHub-style heatmap colour scale (5 tiers) ──────────────────────────────
+const getHeatColor = (val, max) => {
+  if (!val || val === 0) return '#1e2440';
+  const ratio = val / max;
+  if (ratio > 0.8)  return '#ff2d3b'; // darkest red
+  if (ratio > 0.6)  return '#ff4757';
+  if (ratio > 0.4)  return '#ff6b7a';
+  if (ratio > 0.15) return '#ff9fa8';
+  return '#ffd0d4';                    // lightest pink
+};
+
+// Tooltip for heatmap cells
+const HeatTooltip = ({ dayStr, spend, formatAmount }) => {
+  if (!dayStr) return null;
+  const date = new Date(dayStr);
+  const label = date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', weekday: 'short' });
+  return spend
+    ? `${label}\n${formatAmount(spend)}`
+    : `${label}\nNo spending`;
+};
 
 export default function Analytics() {
-  const [data, setData] = useState(null);
+  const [data, setData]         = useState(null);
   const [monthTxs, setMonthTxs] = useState([]);
-  const [year, setYear] = useState(new Date().getFullYear());
-  const [month, setMonth] = useState(new Date().getMonth() + 1);
-  const [loading, setLoading] = useState(true);
+  const [year, setYear]         = useState(new Date().getFullYear());
+  const [month, setMonth]       = useState(new Date().getMonth() + 1);
+  const [loading, setLoading]   = useState(true);
+  const [tooltip, setTooltip]   = useState(null); // { x, y, text }
 
-  // Read week start preference from localStorage
-  const weekStart = localStorage.getItem('finflow_week_start') || 'monday';
+  const weekStart     = localStorage.getItem('finflow_week_start') || 'monday';
   const startsOnMonday = weekStart === 'monday';
-  const WEEKDAYS = startsOnMonday ? WEEKDAYS_MON : WEEKDAYS_SUN;
+  const WEEKDAYS      = startsOnMonday ? WEEKDAYS_MON : WEEKDAYS_SUN;
 
-  useEffect(() => {
-    fetchAnalytics();
-  }, [year, month]);
+  useEffect(() => { fetchAnalytics(); }, [year, month]);
 
   const fetchAnalytics = async () => {
     setLoading(true);
     try {
       const lastDay = new Date(year, month, 0).getDate();
-
       const [analyticsRes, txsRes] = await Promise.all([
         getYearlyAnalytics({ year, month }),
         getTransactions({
-          start_date: `${year}-${String(month).padStart(2, '0')}-01`,
-          end_date: `${year}-${String(month).padStart(2, '0')}-${lastDay}`,
-          limit: 1000
+          start_date: `${year}-${String(month).padStart(2,'0')}-01`,
+          end_date:   `${year}-${String(month).padStart(2,'0')}-${lastDay}`,
+          limit: 1000,
         })
       ]);
-
       setData(analyticsRes.data);
       setMonthTxs(txsRes.data.transactions || []);
-    } catch (err) {
+    } catch {
       toast.error('Failed to load analytics');
     } finally {
       setLoading(false);
     }
   };
 
-  const formatAmount = (val) => '₹' + Number(val || 0).toLocaleString('en-IN');
+  const fmt = (val) => '₹' + Number(val || 0).toLocaleString('en-IN');
 
   const chartData = data?.months?.map((m, i) => ({
     name: MONTHS[i],
@@ -61,287 +79,413 @@ export default function Analytics() {
     Investment: m.investment,
   })) || [];
 
-  const pieData = data?.categoryBreakdown?.map(c => ({
-    name: c.name,
-    value: Number(c.total),
-    color: c.color || '#6c5ce7',
-  })) || [];
+  // Filter out null-name categories (deleted categories with SET NULL)
+  const pieData = (data?.categoryBreakdown || [])
+    .filter(c => c.name)
+    .map(c => ({
+      name: c.name,
+      value: Number(c.total),
+      color: c.color || '#6c5ce7',
+      icon: c.icon || '📦',
+    }));
 
-  // Monthly Heatmap
-  const monthlyHeatmapData = {};
-  if (monthTxs?.length > 0) {
-    monthTxs.forEach(tx => {
-      if (tx.type === 'expense') {
-        const dateStr = tx.date.split('T')[0].substring(0, 10);
-        monthlyHeatmapData[dateStr] = (monthlyHeatmapData[dateStr] || 0) + Number(tx.amount);
-      }
-    });
-  }
-  const maxMonthlyHeat = Math.max(...Object.values(monthlyHeatmapData), 1);
-  const getMonthlyHeatColor = (val) => {
-    if (!val) return '#2a2f45';
-    const intensity = val / maxMonthlyHeat;
-    if (intensity > 0.75) return '#ff4757';
-    if (intensity > 0.5) return '#ff6b81';
-    if (intensity > 0.25) return '#ff9f9f';
-    return '#ffcdd2';
+  // ── Monthly heatmap data ──────────────────────────────────────────────────
+  const heatmapData = {};
+  monthTxs.forEach(tx => {
+    if (tx.type === 'expense') {
+      const d = tx.date.split('T')[0].substring(0, 10);
+      heatmapData[d] = (heatmapData[d] || 0) + Number(tx.amount);
+    }
+  });
+  const maxHeat = Math.max(...Object.values(heatmapData), 1);
+
+  // ── Calendar grid (week-start-aware) ────────────────────────────────────
+  const buildCalendar = () => {
+    const daysInMonth  = new Date(year, month, 0).getDate();
+    const firstWeekDay = new Date(year, month - 1, 1).getDay(); // 0=Sun
+    const blanks = startsOnMonday
+      ? (firstWeekDay + 6) % 7
+      : firstWeekDay;
+    const cells = [
+      ...Array(blanks).fill(null),
+      ...Array.from({ length: daysInMonth }, (_, i) =>
+        `${year}-${String(month).padStart(2,'0')}-${String(i+1).padStart(2,'0')}`
+      ),
+    ];
+    return cells;
   };
 
-  // Calendar grid — respects week start preference
-  const getMonthlyCalendar = () => {
-    const daysInMonth = new Date(year, month, 0).getDate();
-    // getDay() returns 0=Sun, 1=Mon ... 6=Sat
-    const firstDayOfWeek = new Date(year, month - 1, 1).getDay();
+  // ── Insight calculations ──────────────────────────────────────────────────
+  const sortedCats = [...(data?.categoryBreakdown || [])]
+    .filter(c => c.name)
+    .sort((a, b) => Number(b.total) - Number(a.total));
+  const heavyweight   = sortedCats[0] || null;
+  const totalExpenses = sortedCats.reduce((s, c) => s + Number(c.total), 0);
+  const hwPct = heavyweight && totalExpenses > 0
+    ? ((Number(heavyweight.total) / totalExpenses) * 100).toFixed(0) : 0;
 
-    // Calculate leading blank cells
-    let blanksCount;
-    if (startsOnMonday) {
-      // Monday=0 in our grid, so: Mon→0 blanks, Tue→1, ..., Sun→6
-      blanksCount = (firstDayOfWeek + 6) % 7;
-    } else {
-      // Sunday=0 in our grid
-      blanksCount = firstDayOfWeek;
-    }
+  const expenses  = monthTxs.filter(t => t.type === 'expense');
+  const peakSpend = expenses.length > 0
+    ? expenses.reduce((m, t) => Number(t.amount) > Number(m.amount) ? t : m, expenses[0])
+    : null;
 
-    const blanks = Array(blanksCount).fill(null);
-    const days = Array.from({ length: daysInMonth }, (_, i) => {
-      return `${year}-${String(month).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`;
-    });
+  const calendarCells = buildCalendar();
+  const pieTotalVal   = pieData.reduce((s, p) => s + p.value, 0);
 
-    return [...blanks, ...days];
-  };
-
-  // Insights
-  let heavyweight = null;
-  let heavyweightPct = 0;
-  if (data?.categoryBreakdown?.length > 0) {
-    const sorted = [...data.categoryBreakdown].sort((a, b) => Number(b.total) - Number(a.total));
-    heavyweight = sorted[0];
-    const totalExpense = sorted.reduce((sum, c) => sum + Number(c.total), 0);
-    heavyweightPct = totalExpense > 0 ? ((Number(heavyweight.total) / totalExpense) * 100).toFixed(0) : 0;
-  }
-
-  let peakSpend = null;
-  if (monthTxs?.length > 0) {
-    const expenses = monthTxs.filter(t => t.type === 'expense');
-    if (expenses.length > 0) {
-      peakSpend = expenses.reduce((max, tx) => Number(tx.amount) > Number(max.amount) ? tx : max, expenses[0]);
-    }
-  }
-
-  if (loading) {
-    return <div style={styles.loading}>Loading analytics...</div>;
-  }
+  if (loading) return (
+    <div style={s.loadingScreen}>
+      <div style={s.loadingDot} />
+      <span style={s.loadingText}>Loading analytics...</span>
+    </div>
+  );
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <div style={styles.title}>Analytics</div>
-        <select
-          value={year}
-          onChange={e => setYear(Number(e.target.value))}
-          style={styles.yearSelect}
-        >
-          {[2024, 2025, 2026, 2027].map(y => (
-            <option key={y} value={y}>{y}</option>
-          ))}
+    <div style={s.page}>
+
+      {/* ── Header ───────────────────────────────────────────────────────── */}
+      <div style={s.pageHeader}>
+        <div>
+          <div style={s.pageTitle}>Analytics</div>
+          <div style={s.pageSub}>{year} overview</div>
+        </div>
+        <select value={year} onChange={e => setYear(Number(e.target.value))} style={s.select}>
+          {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
         </select>
       </div>
 
-      {/* Line Chart */}
-      <div style={styles.card}>
-        <div style={styles.cardTitle}>Cash Flow Index</div>
+      {/* ── Cash Flow Line Chart ─────────────────────────────────────────── */}
+      <div style={s.card}>
+        <div style={s.cardTitleRow}>
+          <div style={s.cardTitle}>Cash Flow Index</div>
+          <div style={s.cardBadge}>12 months</div>
+        </div>
         <ResponsiveContainer width="100%" height={220}>
-          <LineChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#2a2f45" />
-            <XAxis dataKey="name" stroke="#8892b0" fontSize={11} />
-            <YAxis stroke="#8892b0" fontSize={11}
-              tickFormatter={v => v >= 1000 ? `₹${v/1000}k` : `₹${v}`}
-            />
+          <LineChart data={chartData} margin={{ top: 4, right: 4, left: -10, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#2a2f4566" />
+            <XAxis dataKey="name" stroke="#8892b0" fontSize={11} tickLine={false} />
+            <YAxis stroke="#8892b0" fontSize={11} tickLine={false}
+              tickFormatter={v => v >= 1000 ? `₹${(v/1000).toFixed(0)}k` : `₹${v}`} />
             <Tooltip
-              contentStyle={{ background: '#1a1f35', border: '1px solid #2a2f45', borderRadius: '8px' }}
-              formatter={(val) => formatAmount(val)}
+              contentStyle={{ background: '#1a1f35', border: '1px solid #2a2f45', borderRadius: '10px', fontSize: '13px' }}
+              formatter={fmt}
             />
-            <Legend />
-            <Line type="monotone" dataKey="Income" stroke="#00f5a0" strokeWidth={2} dot={false} />
-            <Line type="monotone" dataKey="Expense" stroke="#ff4757" strokeWidth={2} dot={false} />
-            <Line type="monotone" dataKey="Investment" stroke="#6c5ce7" strokeWidth={2} dot={false} />
+            <Legend wrapperStyle={{ fontSize: '12px' }} />
+            <Line type="monotone" dataKey="Income"     stroke="#00f5a0" strokeWidth={2.5} dot={false} activeDot={{ r: 5 }} />
+            <Line type="monotone" dataKey="Expense"    stroke="#ff4757" strokeWidth={2.5} dot={false} activeDot={{ r: 5 }} />
+            <Line type="monotone" dataKey="Investment" stroke="#6c5ce7" strokeWidth={2.5} dot={false} activeDot={{ r: 5 }} />
           </LineChart>
         </ResponsiveContainer>
       </div>
 
-      {/* Insights Row */}
-      <div style={styles.insightsRow}>
-        <div style={styles.insightCard}>
-          <div style={styles.insightIconOrange}>💼</div>
-          <div style={styles.insightLabel}>SINGLE PEAK SPEND</div>
-          <div style={styles.insightValue}>
-            {peakSpend ? formatAmount(peakSpend.amount) : '₹0'}
-          </div>
-          <div style={styles.insightSubtext}>
+      {/* ── Insight Cards ─────────────────────────────────────────────────── */}
+      <div style={s.insightRow}>
+        <div style={s.insightCard}>
+          <div style={{ ...s.insightBadge, background: '#ffa50215', color: '#ffa502' }}>💼 PEAK SPEND</div>
+          <div style={s.insightMain}>{peakSpend ? fmt(peakSpend.amount) : '—'}</div>
+          <div style={s.insightSub}>
             {peakSpend
-              ? `${peakSpend.category_name || 'Expense'} - ${new Date(peakSpend.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}`
-              : 'No expenses this month'}
+              ? `${peakSpend.category_name || 'Misc'} · ${new Date(peakSpend.date).toLocaleDateString('en-IN',{ month:'short', day:'numeric' })}`
+              : 'No expenses yet'}
           </div>
         </div>
-
-        <div style={styles.insightCard}>
-          <div style={styles.insightIconBlue}>🏠</div>
-          <div style={styles.insightLabel}>HEAVYWEIGHT CATEGORY</div>
-          <div style={styles.insightValue}>
-            {heavyweight ? heavyweight.name : '-'}
-          </div>
-          <div style={styles.insightSubtext}>
-            {heavyweightPct}% of Total Outflow
-          </div>
+        <div style={s.insightCard}>
+          <div style={{ ...s.insightBadge, background: '#6c5ce715', color: '#6c5ce7' }}>🏆 TOP CATEGORY</div>
+          <div style={s.insightMain}>{heavyweight ? heavyweight.name : '—'}</div>
+          <div style={s.insightSub}>{hwPct}% of total outflow</div>
         </div>
       </div>
 
-      {/* Monthly Insights — Pie + Heatmap */}
-      <div style={styles.card}>
-        <div style={styles.cardHeader}>
-          <div style={styles.cardTitle}>Monthly Insights</div>
-          <select
-            value={month}
-            onChange={e => setMonth(Number(e.target.value))}
-            style={styles.monthSelect}
-          >
-            {MONTHS.map((m, i) => (
-              <option key={i} value={i + 1}>{m}</option>
-            ))}
+      {/* ── Monthly Insights Card ─────────────────────────────────────────── */}
+      <div style={s.card}>
+        <div style={s.cardTitleRow}>
+          <div style={s.cardTitle}>Monthly Insights</div>
+          <select value={month} onChange={e => setMonth(Number(e.target.value))} style={s.select}>
+            {MONTHS.map((m, i) => <option key={i} value={i+1}>{m}</option>)}
           </select>
         </div>
 
-        <div style={styles.mergedCardContent}>
-          {/* Pie Chart */}
-          <div style={styles.pieSection}>
-            {pieData.length === 0 ? (
-              <div style={styles.empty}>No expense data for this month</div>
-            ) : (
-              <>
-                <div style={styles.pieWrapper}>
-                  <ResponsiveContainer width="100%" height={220}>
-                    <PieChart>
-                      <Pie data={pieData} cx="50%" cy="50%" innerRadius="55%" outerRadius="80%" dataKey="value">
-                        {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-                      </Pie>
-                      <Tooltip formatter={(val) => formatAmount(val)} contentStyle={{ background: '#1a1f35', border: '1px solid #2a2f45', borderRadius: '8px' }} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                <div style={styles.legend}>
-                  {pieData.map((item, i) => {
-                    const total = pieData.reduce((s, p) => s + p.value, 0);
-                    const pct = total > 0 ? ((item.value / total) * 100).toFixed(1) : 0;
-                    return (
-                      <div key={i} style={styles.legendItem}>
-                        <div style={{ ...styles.legendDot, background: item.color }} />
-                        <span style={styles.legendName}>{item.name}</span>
-                        <span style={styles.legendPct}>{pct}%</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            )}
+        {/* ── Pie + Legend side by side ─────────────────────────────── */}
+        {pieData.length === 0 ? (
+          <div style={s.emptyState}>
+            <div style={s.emptyIcon}>📊</div>
+            <div style={s.emptyText}>No expense data for {MONTHS_FULL[month-1]}</div>
           </div>
-
-          {/* Calendar Heatmap — week start aware */}
-          <div style={styles.calendarContainer}>
-            <div style={styles.calendarSubTitle}>
-              Spending Intensity
-              {startsOnMonday
-                ? ' (Mon–Sun)'
-                : ' (Sun–Sat)'}
-            </div>
-            <div style={styles.calendarHeaderRow}>
-              {WEEKDAYS.map((day, i) => (
-                <div key={i} style={styles.calendarDayLabel}>{day}</div>
-              ))}
-            </div>
-            <div style={styles.calendarGrid}>
-              {getMonthlyCalendar().map((dayStr, i) => {
-                if (!dayStr) return <div key={i} style={styles.calendarCellEmpty} />;
-                const dayNum = parseInt(dayStr.split('-')[2]);
-                const spend = monthlyHeatmapData[dayStr];
-
-                return (
-                  <div
-                    key={i}
-                    title={`${dayStr}: ${spend ? formatAmount(spend) : 'No spend'}`}
-                    style={{
-                      ...styles.calendarCell,
-                      background: getMonthlyHeatColor(spend),
-                      color: spend ? '#fff' : '#8892b0'
-                    }}
+        ) : (
+          <div style={s.pieRow}>
+            {/* Donut */}
+            <div style={s.donutWrap}>
+              <ResponsiveContainer width="100%" height={240}>
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    cx="50%" cy="50%"
+                    innerRadius="52%" outerRadius="80%"
+                    paddingAngle={2}
+                    dataKey="value"
                   >
-                    {dayNum}
+                    {pieData.map((entry, i) => <Cell key={i} fill={entry.color} stroke="transparent" />)}
+                  </Pie>
+                  <Tooltip
+                    formatter={(val, name) => [fmt(val), name]}
+                    contentStyle={{ background: '#1a1f35', border: '1px solid #2a2f45', borderRadius: '10px', fontSize: '13px' }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              {/* Centre label */}
+              <div style={s.donutCenter}>
+                <div style={s.donutCenterAmt}>{fmt(pieTotalVal)}</div>
+                <div style={s.donutCenterLbl}>total spent</div>
+              </div>
+            </div>
+
+            {/* Legend — 2-column grid */}
+            <div style={s.legendGrid}>
+              {pieData.map((item, i) => {
+                const pct = pieTotalVal > 0 ? ((item.value / pieTotalVal) * 100).toFixed(1) : 0;
+                return (
+                  <div key={i} style={s.legendItem}>
+                    <div style={{ ...s.legendSwatch, background: item.color }} />
+                    <div style={s.legendDetails}>
+                      <div style={s.legendName}>{item.icon} {item.name}</div>
+                      <div style={s.legendMeta}>
+                        <span style={s.legendAmt}>{fmt(item.value)}</span>
+                        <span style={{ ...s.legendPct, color: item.color }}>{pct}%</span>
+                      </div>
+                    </div>
                   </div>
                 );
               })}
             </div>
           </div>
+        )}
+
+        {/* ── GitHub-style heatmap ────────────────────────────────────── */}
+        <div style={s.heatmapSection}>
+          <div style={s.heatmapTitleRow}>
+            <span style={s.heatmapTitle}>Spending Intensity — {MONTHS_FULL[month-1]} {year}</span>
+            <div style={s.heatLegend}>
+              <span style={s.heatLegendLbl}>Less</span>
+              {['#1e2440','#ffd0d4','#ff9fa8','#ff6b7a','#ff4757','#ff2d3b'].map((c,i) => (
+                <div key={i} style={{ ...s.heatLegendCell, background: c }} />
+              ))}
+              <span style={s.heatLegendLbl}>More</span>
+            </div>
+          </div>
+
+          {/* Day labels */}
+          <div style={s.heatGrid}>
+            {/* Weekday labels column */}
+            <div style={s.heatDayLabels}>
+              {WEEKDAYS.map((d, i) => (
+                <div key={i} style={s.heatDayLabel}>{d}</div>
+              ))}
+            </div>
+
+            {/* Calendar cells */}
+            <div style={s.heatCells}>
+              {calendarCells.map((dayStr, i) => {
+                if (!dayStr) return <div key={i} style={s.heatCellEmpty} />;
+                const spend = heatmapData[dayStr];
+                const dayNum = parseInt(dayStr.split('-')[2]);
+                const isToday = dayStr === new Date().toISOString().split('T')[0];
+                return (
+                  <div
+                    key={i}
+                    style={{
+                      ...s.heatCell,
+                      background: getHeatColor(spend, maxHeat),
+                      border: isToday ? '2px solid #00f5a0' : '1px solid #ffffff08',
+                    }}
+                    onMouseEnter={e => {
+                      const date = new Date(dayStr);
+                      const label = date.toLocaleDateString('en-IN',{ weekday:'short', day:'numeric', month:'short' });
+                      setTooltip({
+                        x: e.clientX, y: e.clientY,
+                        text: spend ? `${label}\n${fmt(spend)}` : `${label}\nNo spending`,
+                      });
+                    }}
+                    onMouseLeave={() => setTooltip(null)}
+                  >
+                    <span style={s.heatCellNum}>{dayNum}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Tooltip */}
+          {tooltip && (
+            <div style={{
+              ...s.heatTooltip,
+              top: tooltip.y - 60,
+              left: Math.min(tooltip.x - 60, typeof window !== 'undefined' ? window.innerWidth - 160 : 200),
+            }}>
+              {tooltip.text.split('\n').map((line, i) => (
+                <div key={i} style={i === 1 ? s.heatTooltipAmt : s.heatTooltipDate}>{line}</div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Bar Chart */}
-      <div style={styles.card}>
-        <div style={styles.cardTitle}>Monthly Comparison</div>
+      {/* ── Monthly Comparison Bar Chart ──────────────────────────────────── */}
+      <div style={s.card}>
+        <div style={s.cardTitleRow}>
+          <div style={s.cardTitle}>Monthly Comparison</div>
+          <div style={s.cardBadge}>bar view</div>
+        </div>
         <ResponsiveContainer width="100%" height={200}>
-          <BarChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#2a2f45" />
-            <XAxis dataKey="name" stroke="#8892b0" fontSize={11} />
-            <YAxis stroke="#8892b0" fontSize={11}
-              tickFormatter={v => v >= 1000 ? `₹${v/1000}k` : `₹${v}`}
-            />
+          <BarChart data={chartData} margin={{ top: 4, right: 4, left: -10, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#2a2f4566" />
+            <XAxis dataKey="name" stroke="#8892b0" fontSize={11} tickLine={false} />
+            <YAxis stroke="#8892b0" fontSize={11} tickLine={false}
+              tickFormatter={v => v >= 1000 ? `₹${(v/1000).toFixed(0)}k` : `₹${v}`} />
             <Tooltip
-              contentStyle={{ background: '#1a1f35', border: '1px solid #2a2f45', borderRadius: '8px' }}
-              formatter={(val) => formatAmount(val)}
+              contentStyle={{ background: '#1a1f35', border: '1px solid #2a2f45', borderRadius: '10px', fontSize: '13px' }}
+              formatter={fmt}
             />
-            <Legend />
-            <Bar dataKey="Income" fill="#00f5a0" radius={[4,4,0,0]} />
-            <Bar dataKey="Expense" fill="#ff4757" radius={[4,4,0,0]} />
-            <Bar dataKey="Investment" fill="#6c5ce7" radius={[4,4,0,0]} />
+            <Legend wrapperStyle={{ fontSize: '12px' }} />
+            <Bar dataKey="Income"     fill="#00f5a0" radius={[4,4,0,0]} maxBarSize={28} />
+            <Bar dataKey="Expense"    fill="#ff4757" radius={[4,4,0,0]} maxBarSize={28} />
+            <Bar dataKey="Investment" fill="#6c5ce7" radius={[4,4,0,0]} maxBarSize={28} />
           </BarChart>
         </ResponsiveContainer>
       </div>
 
-      <div style={{ height: '80px' }} />
+      <div style={{ height: '100px' }} />
     </div>
   );
 }
 
-const styles = {
-  container: { padding: '20px', background: '#0a0e1a', minHeight: '100vh', paddingBottom: '80px' },
-  loading: { display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0a0e1a', color: '#00f5a0' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingTop: '10px' },
-  title: { fontSize: '24px', fontWeight: '700', color: '#fff' },
-  yearSelect: { background: '#1a1f35', border: '1px solid #2a2f45', color: '#fff', padding: '8px 12px', borderRadius: '10px', fontSize: '14px', outline: 'none' },
-  card: { background: '#1a1f35', borderRadius: '16px', padding: '20px', marginBottom: '16px', border: '1px solid #2a2f45' },
-  cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' },
-  cardTitle: { fontSize: '16px', fontWeight: '700', color: '#fff', marginBottom: '8px' },
-  insightsRow: { display: 'flex', gap: '16px', marginBottom: '16px' },
-  insightCard: { flex: 1, background: '#1a1f35', borderRadius: '16px', padding: '20px', border: '1px solid #2a2f45', display: 'flex', flexDirection: 'column' },
-  insightIconOrange: { width: '32px', height: '32px', background: '#ffa50222', color: '#ffa502', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', marginBottom: '12px' },
-  insightIconBlue: { width: '32px', height: '32px', background: '#0066ff22', color: '#0066ff', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', marginBottom: '12px' },
-  insightLabel: { fontSize: '10px', fontWeight: '800', color: '#8892b0', letterSpacing: '0.5px', marginBottom: '8px' },
-  insightValue: { fontSize: '22px', fontWeight: '700', color: '#fff', marginBottom: '4px' },
-  insightSubtext: { fontSize: '12px', color: '#8892b0' },
-  monthSelect: { background: '#0a0e1a', border: '1px solid #2a2f45', color: '#fff', padding: '6px 10px', borderRadius: '8px', fontSize: '13px', outline: 'none' },
-  empty: { color: '#8892b0', textAlign: 'center', padding: '20px', width: '100%' },
-  mergedCardContent: { display: 'flex', flexWrap: 'wrap', gap: '40px', alignItems: 'center' },
-  pieSection: { flex: 1, minWidth: '280px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: '20px' },
-  pieWrapper: { flex: '1 1 200px', maxWidth: '300px', width: '100%' },
-  legend: { flex: '1 1 150px', minWidth: '150px', display: 'flex', flexDirection: 'column', gap: '8px' },
-  legendItem: { display: 'flex', alignItems: 'center', gap: '8px' },
-  legendDot: { width: '10px', height: '10px', borderRadius: '50%', flexShrink: 0 },
-  legendName: { fontSize: '12px', color: '#fff', flex: 1 },
-  legendPct: { fontSize: '12px', color: '#8892b0', fontWeight: '600' },
-  calendarContainer: { flex: 1, minWidth: '280px', display: 'flex', flexDirection: 'column', background: '#0a0e1a', padding: '16px', borderRadius: '12px', border: '1px solid #2a2f45' },
-  calendarSubTitle: { fontSize: '12px', fontWeight: '700', color: '#8892b0', marginBottom: '12px', textAlign: 'center', letterSpacing: '0.5px' },
-  calendarHeaderRow: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', marginBottom: '8px', textAlign: 'center' },
-  calendarDayLabel: { fontSize: '10px', color: '#8892b0', fontWeight: '700' },
-  calendarGrid: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' },
-  calendarCell: { aspectRatio: '1', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '700', cursor: 'pointer', border: '1px solid #2a2f45' },
-  calendarCellEmpty: { aspectRatio: '1', background: 'transparent' },
+// ── Styles ────────────────────────────────────────────────────────────────────
+const s = {
+  page:        { padding: '20px', background: '#0a0e1a', minHeight: '100vh' },
+  loadingScreen: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0a0e1a', gap: '16px' },
+  loadingDot:  { width: '40px', height: '40px', borderRadius: '50%', background: 'linear-gradient(135deg,#00f5a0,#0066ff)', animation: 'pulse 1.5s infinite' },
+  loadingText: { color: '#8892b0', fontSize: '14px' },
+
+  // Header
+  pageHeader:  { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', paddingTop: '10px' },
+  pageTitle:   { fontSize: '24px', fontWeight: '700', color: '#fff' },
+  pageSub:     { fontSize: '13px', color: '#8892b0', marginTop: '2px' },
+
+  // Cards
+  card:        { background: '#1a1f35', borderRadius: '16px', padding: '20px', marginBottom: '16px', border: '1px solid #2a2f45' },
+  cardTitleRow:{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' },
+  cardTitle:   { fontSize: '16px', fontWeight: '700', color: '#fff' },
+  cardBadge:   { fontSize: '11px', color: '#8892b0', background: '#2a2f45', padding: '4px 10px', borderRadius: '20px' },
+
+  select:      { background: '#0a0e1a', border: '1px solid #2a2f45', color: '#fff', padding: '7px 12px', borderRadius: '10px', fontSize: '13px', outline: 'none', cursor: 'pointer' },
+
+  // Insight cards
+  insightRow:  { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' },
+  insightCard: { background: '#1a1f35', borderRadius: '16px', padding: '18px 16px', border: '1px solid #2a2f45' },
+  insightBadge:{ display: 'inline-block', fontSize: '10px', fontWeight: '700', letterSpacing: '0.6px', padding: '4px 10px', borderRadius: '20px', marginBottom: '12px' },
+  insightMain: { fontSize: '20px', fontWeight: '700', color: '#fff', marginBottom: '4px', lineHeight: 1.2 },
+  insightSub:  { fontSize: '12px', color: '#8892b0', lineHeight: 1.4 },
+
+  // Pie section
+  emptyState:  { textAlign: 'center', padding: '40px 20px' },
+  emptyIcon:   { fontSize: '36px', marginBottom: '12px' },
+  emptyText:   { fontSize: '14px', color: '#8892b0' },
+
+  pieRow: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '24px',
+    alignItems: 'flex-start',
+    marginBottom: '28px',
+  },
+  donutWrap: {
+    position: 'relative',
+    flex: '0 0 220px',
+    width: '220px',
+  },
+  donutCenter: {
+    position: 'absolute',
+    top: '50%', left: '50%',
+    transform: 'translate(-50%, -50%)',
+    textAlign: 'center',
+    pointerEvents: 'none',
+  },
+  donutCenterAmt: { fontSize: '15px', fontWeight: '700', color: '#fff', whiteSpace: 'nowrap' },
+  donutCenterLbl: { fontSize: '11px', color: '#8892b0', marginTop: '2px' },
+
+  legendGrid: {
+    flex: 1,
+    minWidth: '200px',
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+    gap: '10px',
+    alignContent: 'start',
+  },
+  legendItem:    { display: 'flex', alignItems: 'flex-start', gap: '10px' },
+  legendSwatch:  { width: '12px', height: '12px', borderRadius: '3px', flexShrink: 0, marginTop: '3px' },
+  legendDetails: { flex: 1, minWidth: 0 },
+  legendName:    { fontSize: '13px', color: '#fff', fontWeight: '500', marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  legendMeta:    { display: 'flex', gap: '8px', alignItems: 'center' },
+  legendAmt:     { fontSize: '12px', color: '#8892b0' },
+  legendPct:     { fontSize: '12px', fontWeight: '700' },
+
+  // Heatmap
+  heatmapSection: { position: 'relative' },
+  heatmapTitleRow:{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' },
+  heatmapTitle:   { fontSize: '13px', fontWeight: '600', color: '#8892b0' },
+  heatLegend:     { display: 'flex', alignItems: 'center', gap: '4px' },
+  heatLegendLbl:  { fontSize: '11px', color: '#8892b0' },
+  heatLegendCell: { width: '13px', height: '13px', borderRadius: '3px' },
+
+  // Grid: day-labels col + cells
+  heatGrid: { display: 'flex', gap: '6px', alignItems: 'flex-start', overflowX: 'auto' },
+  heatDayLabels: {
+    display: 'grid',
+    gridTemplateRows: 'repeat(7, 1fr)',
+    gap: '4px',
+    flexShrink: 0,
+    paddingTop: '2px',
+  },
+  heatDayLabel: { fontSize: '10px', color: '#8892b0', height: '28px', display: 'flex', alignItems: 'center', paddingRight: '4px', fontWeight: '600', whiteSpace: 'nowrap' },
+  heatCells: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(7, 1fr)',
+    gridAutoFlow: 'column',  // fill column-by-column like GitHub
+    gap: '4px',
+    flex: 1,
+  },
+  heatCell: {
+    width: '100%',
+    aspectRatio: '1',
+    minWidth: '28px',
+    maxWidth: '42px',
+    borderRadius: '5px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    transition: 'transform 0.1s',
+  },
+  heatCellEmpty: {
+    width: '100%',
+    aspectRatio: '1',
+    minWidth: '28px',
+    maxWidth: '42px',
+    borderRadius: '5px',
+    background: 'transparent',
+  },
+  heatCellNum: { fontSize: '10px', fontWeight: '600', color: 'rgba(255,255,255,0.6)', userSelect: 'none' },
+
+  // Hover tooltip
+  heatTooltip: {
+    position: 'fixed',
+    background: '#1a1f35',
+    border: '1px solid #2a2f45',
+    borderRadius: '8px',
+    padding: '8px 12px',
+    zIndex: 9999,
+    pointerEvents: 'none',
+    boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+    minWidth: '130px',
+  },
+  heatTooltipDate: { fontSize: '12px', color: '#8892b0', marginBottom: '2px' },
+  heatTooltipAmt:  { fontSize: '14px', fontWeight: '700', color: '#ff4757' },
 };

@@ -22,7 +22,7 @@ export default function Header() {
   };
 
   const handleImageUpload = async (e) => {
-    // Array ka first file access karna zaroori hai
+    // Using array first file to pick the exact image later
     const file = e.target.files.item(0);
     
     if (file) {
