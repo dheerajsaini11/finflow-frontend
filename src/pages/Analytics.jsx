@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer,
-  BarChart, Bar, PieChart, Pie, Cell
+  BarChart, Bar, PieChart, Pie, Cell,
 } from 'recharts';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -13,9 +13,18 @@ const MONTHS_FULL = ['January','February','March','April','May','June','July','A
 const WEEKDAYS_MON = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 const WEEKDAYS_SUN = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-// 5-tier heat scale
+const CELL  = 28;  // px — fixed desktop heat-cell size
+const GAP   =  4;  // px — gap between cells
+const MAX_LEGEND_ROWS = 5;
+
+// Heatmap desktop width = day-label col + gap + 7 cols of cells
+// April has 5 weeks = 5 columns → max cols = 6 (blanks + 5 full weeks)
+// We allow up to 6 columns: 6*CELL + 5*GAP = 168+20=188, +label(38)+gap(6) = 232
+// Use 240px as the fixed heatmap area width on desktop so it never expands
+const HEAT_LABEL_W = 38;
+
 const getHeatColor = (val, max) => {
-  if (!val || val === 0) return '#1e2440';
+  if (!val) return '#1e2440';
   const r = val / max;
   if (r > 0.80) return '#ff2d3b';
   if (r > 0.60) return '#ff4757';
@@ -26,7 +35,7 @@ const getHeatColor = (val, max) => {
 
 // ── Responsive hook ───────────────────────────────────────────────────────────
 const useWidth = () => {
-  const [w, setW] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
+  const [w, setW] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
   useEffect(() => {
     const h = () => setW(window.innerWidth);
     window.addEventListener('resize', h);
@@ -35,42 +44,26 @@ const useWidth = () => {
   return w;
 };
 
-// ── Legend layout calculator ──────────────────────────────────────────────────
-// Returns { maxRows, numCols, pieSize }
-// We cap rows per column at MAX_ROWS so categories fill downward first.
-const MAX_ROWS = 5;
-
-const getLegendLayout = (count, isMobile, isTablet) => {
-  if (isMobile) return { maxRows: count, numCols: 1, pieSize: 180 };
-  if (isTablet)  return { maxRows: MAX_ROWS, numCols: Math.ceil(count / MAX_ROWS), pieSize: 180 };
-  // Desktop: figure out how many cols we'll need, then shrink pie if many cols
-  const numCols = Math.max(1, Math.ceil(count / MAX_ROWS));
-  // Each legend col is ~170px + gap; pie shrinks from 220 down to 140 as cols grow
-  const pieSize = Math.max(140, Math.min(220, 220 - (numCols - 1) * 20));
-  return { maxRows: MAX_ROWS, numCols, pieSize };
-};
-
-// ── Main Component ────────────────────────────────────────────────────────────
+// ── Main ──────────────────────────────────────────────────────────────────────
 export default function Analytics() {
-  const [data, setData]         = useState(null);
+  const [data,     setData]     = useState(null);
   const [monthTxs, setMonthTxs] = useState([]);
-  const [year, setYear]         = useState(new Date().getFullYear());
-  const [month, setMonth]       = useState(new Date().getMonth() + 1);
-  const [loading, setLoading]   = useState(true);
-  const [tooltip, setTooltip]   = useState(null); // { x, y, lines[] }
+  const [year,     setYear]     = useState(new Date().getFullYear());
+  const [month,    setMonth]    = useState(new Date().getMonth() + 1);
+  const [loading,  setLoading]  = useState(true);
+  const [tip,      setTip]      = useState(null); // { x, y, lines[] }
 
-  const vw         = useWidth();
-  const isMobile   = vw < 520;
-  const isTablet   = vw >= 520 && vw < 960;
-  const isDesktop  = vw >= 960;
+  const vw          = useWidth();
+  const isMobile    = vw < 640;   // ≤ 639 → stacked
+  const isDesktop   = vw >= 640;
 
   const weekStart      = localStorage.getItem('finflow_week_start') || 'monday';
   const startsOnMonday = weekStart === 'monday';
   const WEEKDAYS       = startsOnMonday ? WEEKDAYS_MON : WEEKDAYS_SUN;
 
-  useEffect(() => { fetchAnalytics(); }, [year, month]);
+  useEffect(() => { load(); }, [year, month]);
 
-  const fetchAnalytics = async () => {
+  const load = async () => {
     setLoading(true);
     try {
       const lastDay = new Date(year, month, 0).getDate();
@@ -84,156 +77,165 @@ export default function Analytics() {
       ]);
       setData(aRes.data);
       setMonthTxs(tRes.data.transactions || []);
-    } catch {
-      toast.error('Failed to load analytics');
-    } finally {
-      setLoading(false);
-    }
+    } catch { toast.error('Failed to load analytics'); }
+    finally  { setLoading(false); }
   };
 
-  const fmt = (val) => '₹' + Number(val || 0).toLocaleString('en-IN');
+  const fmt = v => '₹' + Number(v || 0).toLocaleString('en-IN');
 
   const chartData = data?.months?.map((m, i) => ({
     name: MONTHS[i], Income: m.income, Expense: m.expense, Investment: m.investment,
   })) || [];
 
-  // Filter null-name (deleted categories with SET NULL)
+  // Null-safe pie (filters deleted categories with SET NULL)
   const pieData = (data?.categoryBreakdown || [])
     .filter(c => c.name)
     .map(c => ({ name: c.name, value: Number(c.total), color: c.color || '#6c5ce7', icon: c.icon || '📦' }));
 
-  // Heatmap
-  const heatmapData = {};
+  // Heatmap lookup
+  const heatMap = {};
   monthTxs.forEach(tx => {
     if (tx.type === 'expense') {
       const d = tx.date.split('T')[0].substring(0, 10);
-      heatmapData[d] = (heatmapData[d] || 0) + Number(tx.amount);
+      heatMap[d] = (heatMap[d] || 0) + Number(tx.amount);
     }
   });
-  const maxHeat = Math.max(...Object.values(heatmapData), 1);
+  const maxHeat = Math.max(...Object.values(heatMap), 1);
 
-  // Calendar cells (week-start aware)
-  const buildCalendar = () => {
+  // Calendar (week-start aware, column-first: fills Mon→Sun then next week)
+  const buildCal = () => {
     const dim = new Date(year, month, 0).getDate();
-    const fwd = new Date(year, month - 1, 1).getDay();
+    const fwd = new Date(year, month - 1, 1).getDay(); // 0=Sun
     const blanks = startsOnMonday ? (fwd + 6) % 7 : fwd;
     return [
       ...Array(blanks).fill(null),
       ...Array.from({ length: dim }, (_, i) =>
-        `${year}-${String(month).padStart(2,'0')}-${String(i+1).padStart(2,'0')}`
-      ),
+        `${year}-${String(month).padStart(2,'0')}-${String(i+1).padStart(2,'0')}`),
     ];
   };
 
-  // Insight calculations
-  const sortedCats    = [...pieData].sort((a,b) => b.value - a.value);
-  const heavyweight   = sortedCats[0] || null;
-  const totalExpenses = sortedCats.reduce((s,c) => s + c.value, 0);
-  const hwPct = heavyweight && totalExpenses > 0
-    ? ((heavyweight.value / totalExpenses) * 100).toFixed(0) : 0;
+  // Insights
+  const sorted    = [...pieData].sort((a,b) => b.value - a.value);
+  const hw        = sorted[0] || null;
+  const totExp    = sorted.reduce((s,c) => s + c.value, 0);
+  const hwPct     = hw && totExp > 0 ? ((hw.value/totExp)*100).toFixed(0) : 0;
   const expenses  = monthTxs.filter(t => t.type === 'expense');
-  const peakSpend = expenses.length > 0
-    ? expenses.reduce((mx, t) => Number(t.amount) > Number(mx.amount) ? t : mx, expenses[0])
+  const peak      = expenses.length
+    ? expenses.reduce((mx,t) => +t.amount > +mx.amount ? t : mx, expenses[0])
     : null;
 
-  const calendarCells = buildCalendar();
-  const pieTotalVal   = pieData.reduce((s,p) => s + p.value, 0);
-  const todayStr      = new Date().toISOString().split('T')[0];
+  const cells       = buildCal();
+  const pieTotalVal = pieData.reduce((s,p) => s + p.value, 0);
+  const todayStr    = new Date().toISOString().split('T')[0];
 
-  // Legend layout
-  const { maxRows, numCols, pieSize } = getLegendLayout(pieData.length, isMobile, isTablet);
+  // ── How many legend columns fit between donut and heatmap ─────────────────
+  // On mobile: 1 col legend beside the donut (donut=160px, legend fills rest)
+  // On desktop: legend fills remaining space between donut(180px)+gap and heatmap
+  //   Each legend column is ~170px wide; use auto-fill so it decides naturally.
+  const numLegendRows = Math.min(MAX_LEGEND_ROWS, pieData.length);
 
-  // ── Heat cell size: fill available width on mobile ────────────────────────
-  // On mobile we want the grid to take full card width.
-  // Day-label col ≈ 36px, gap between label+cells = 6px, 4px gaps between 7 cols
-  // cellSize = (availableWidth - 36 - 6 - 6*4) / 7
-  // We clamp between 28–44px.
-  const CARD_PADDING  = 20;                         // card has 20px padding each side
-  const availCardW    = vw - CARD_PADDING * 2 - 2;  // subtract card border too
-  const DAY_LABEL_W   = 36;
-  const heatCellSize  = isMobile
-    ? Math.max(28, Math.min(44, Math.floor((availCardW - DAY_LABEL_W - 6 - 24) / 7)))
-    : 28;
+  // ── Mobile heat-cell size: fill full card width ───────────────────────────
+  const cardPad    = 20;  // card padding (each side)
+  const availW     = vw - cardPad * 2 - 2; // card content width
+  // label col + gap + 7 cells + 6 inter-cell gaps = HEAT_LABEL_W+6 + 7*cell + 6*4
+  // cell = (availW - HEAT_LABEL_W - 6 - 24) / 7
+  const mobileCellPx = Math.max(30, Math.min(44, Math.floor((availW - HEAT_LABEL_W - 6 - 24) / 7)));
+  const cellPx = isMobile ? mobileCellPx : CELL;
 
-  // ── Rendering ─────────────────────────────────────────────────────────────
   if (loading) return (
-    <div style={st.loadingScreen}>
-      <div style={st.loadingSpinner} />
-      <span style={st.loadingText}>Loading analytics...</span>
+    <div style={s.loader}>
+      <div style={s.loaderSpinner} />
+      <span style={s.loaderTxt}>Loading analytics...</span>
     </div>
   );
 
-  // ── Heatmap block (self-contained) ────────────────────────────────────────
-  const HeatmapBlock = () => (
-    <div style={{ width: '100%' }}>
-      {/* Title row: label left, legend+dropdown right */}
-      <div style={st.heatTitleRow}>
-        <span style={st.heatTitle}>Spending Intensity — {MONTHS_FULL[month-1]} {year}</span>
-        <div style={st.heatControls}>
-          {/* Heat legend sits directly left of dropdown */}
-          <div style={st.heatLegend}>
-            <span style={st.heatLegLbl}>Less</span>
-            {['#1e2440','#ffd0d4','#ff9fa8','#ff6b7a','#ff4757','#ff2d3b'].map((c,i) => (
-              <div key={i} style={{ ...st.heatLegCell, background: c }} />
-            ))}
-            <span style={st.heatLegLbl}>More</span>
-          </div>
+  // ── Heatmap (reusable, width adapts) ─────────────────────────────────────
+  const Heatmap = () => (
+    <div>
+      {/* Title row */}
+      <div style={s.heatHead}>
+        <span style={s.heatTitle}>
+          Spending Intensity — {MONTHS_FULL[month-1]} {year}
+        </span>
+        {/* Legend: Less ░░▒▓█ More */}
+        <div style={s.heatLegRow}>
+          <span style={s.heatLegLbl}>Less</span>
+          {['#1e2440','#ffd0d4','#ff9fa8','#ff6b7a','#ff4757','#ff2d3b'].map((c,i) => (
+            <div key={i} style={{ ...s.heatLegBox, background: c }} />
+          ))}
+          <span style={s.heatLegLbl}>More</span>
         </div>
       </div>
 
-      {/* Grid: day-labels | cells */}
-      <div style={st.heatGrid}>
-        {/* Day labels column */}
-        <div style={{ ...st.heatDayLabels, rowGap: `${heatCellSize - 18}px` }}>
-          {WEEKDAYS.map((d, i) => (
-            <div key={i} style={{ ...st.heatDayLabel, height: `${heatCellSize}px` }}>{d}</div>
+      {/* Day-labels + cell grid side by side */}
+      <div style={{ display:'flex', gap:'6px', alignItems:'flex-start' }}>
+
+        {/* Day labels — MUST match cell height + gap pixel-perfect */}
+        <div style={{
+          display: 'grid',
+          gridTemplateRows: `repeat(7, ${cellPx}px)`,
+          gap: `${GAP}px`,
+          flexShrink: 0,
+          width: `${HEAT_LABEL_W}px`,
+        }}>
+          {WEEKDAYS.map((d,i) => (
+            <div key={i} style={{
+              height: cellPx,
+              display: 'flex',
+              alignItems: 'center',
+              fontSize: 10,
+              fontWeight: 700,
+              color: '#8892b0',
+              whiteSpace: 'nowrap',
+            }}>{d}</div>
           ))}
         </div>
 
-        {/* Cells: column-first grid, 7 rows */}
+        {/* Cells — column-first (fills Mon→Sun, then next week column) */}
         <div style={{
           display: 'grid',
-          gridTemplateRows: `repeat(7, ${heatCellSize}px)`,
+          gridTemplateRows: `repeat(7, ${cellPx}px)`,
           gridAutoFlow: 'column',
-          gridAutoColumns: `${heatCellSize}px`,
-          gap: '4px',
-          overflowX: 'auto',
+          gridAutoColumns: `${cellPx}px`,
+          gap: `${GAP}px`,
+          // On mobile: allow horizontal scroll if month has 6 week-columns
+          overflowX: isMobile ? 'auto' : 'visible',
         }}>
-          {calendarCells.map((dayStr, i) => {
+          {cells.map((dayStr, i) => {
             if (!dayStr) return (
-              <div key={i} style={{ width: heatCellSize, height: heatCellSize, borderRadius: 5 }} />
+              <div key={i} style={{ width: cellPx, height: cellPx, borderRadius: 5 }} />
             );
-            const spend  = heatmapData[dayStr];
-            const dayNum = parseInt(dayStr.split('-')[2]);
+            const spend   = heatMap[dayStr];
+            const dayNum  = parseInt(dayStr.split('-')[2]);
             const isToday = dayStr === todayStr;
             return (
               <div
                 key={i}
                 style={{
-                  width: heatCellSize, height: heatCellSize,
+                  width: cellPx, height: cellPx,
                   borderRadius: 5,
                   background: getHeatColor(spend, maxHeat),
                   border: isToday ? '2px solid #00f5a0' : '1px solid rgba(255,255,255,0.05)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   cursor: 'pointer',
-                  transition: 'transform 0.1s, box-shadow 0.1s',
-                  boxShadow: spend ? '0 1px 4px rgba(0,0,0,0.3)' : 'none',
+                  boxShadow: spend ? '0 1px 3px rgba(0,0,0,0.3)' : 'none',
+                  flexShrink: 0,
                 }}
                 onMouseEnter={e => {
-                  const date = new Date(dayStr);
-                  const lbl  = date.toLocaleDateString('en-IN',{ weekday:'short', day:'numeric', month:'short' });
-                  setTooltip({ x: e.clientX, y: e.clientY, lines: [lbl, spend ? fmt(spend) : 'No spending'] });
+                  const lbl = new Date(dayStr).toLocaleDateString('en-IN',{
+                    weekday:'short', day:'numeric', month:'short',
+                  });
+                  setTip({ x: e.clientX, y: e.clientY,
+                    lines: [lbl, spend ? fmt(spend) : 'No spending'] });
                 }}
-                onMouseLeave={() => setTooltip(null)}
+                onMouseLeave={() => setTip(null)}
               >
                 <span style={{
-                  fontSize: heatCellSize >= 36 ? 11 : 10,
+                  fontSize: cellPx >= 36 ? 11 : 10,
                   fontWeight: 600,
-                  color: spend ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.25)',
+                  color: spend ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.22)',
                   userSelect: 'none',
-                }}>
-                  {dayNum}
-                </span>
+                }}>{dayNum}</span>
               </div>
             );
           })}
@@ -243,31 +245,31 @@ export default function Analytics() {
   );
 
   return (
-    <div style={st.page}>
+    <div style={s.page}>
 
-      {/* ── Page header ──────────────────────────────────────────────────── */}
-      <div style={st.pageHeader}>
+      {/* Header */}
+      <div style={s.pageHead}>
         <div>
-          <div style={st.pageTitle}>Analytics</div>
-          <div style={st.pageSub}>{year} overview</div>
+          <div style={s.pageTitle}>Analytics</div>
+          <div style={s.pageSub}>{year} overview</div>
         </div>
-        <select value={year} onChange={e => setYear(Number(e.target.value))} style={st.select}>
+        <select value={year} onChange={e => setYear(+e.target.value)} style={s.sel}>
           {[2024,2025,2026,2027].map(y => <option key={y} value={y}>{y}</option>)}
         </select>
       </div>
 
-      {/* ── Cash Flow line chart ─────────────────────────────────────────── */}
-      <div style={st.card}>
-        <div style={st.cardTitleRow}>
-          <div style={st.cardTitle}>Cash Flow Index</div>
-          <div style={st.cardBadge}>12 months</div>
+      {/* Cash Flow */}
+      <div style={s.card}>
+        <div style={s.cardHeadRow}>
+          <span style={s.cardTitle}>Cash Flow Index</span>
+          <span style={s.cardBadge}>12 months</span>
         </div>
         <ResponsiveContainer width="100%" height={220}>
           <LineChart data={chartData} margin={{ top:4, right:4, left:-10, bottom:0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#2a2f4566" />
             <XAxis dataKey="name" stroke="#8892b0" fontSize={11} tickLine={false} />
             <YAxis stroke="#8892b0" fontSize={11} tickLine={false}
-              tickFormatter={v => v >= 1000 ? `₹${(v/1000).toFixed(0)}k` : `₹${v}`} />
+              tickFormatter={v => v>=1000 ? `₹${(v/1000).toFixed(0)}k` : `₹${v}`} />
             <Tooltip contentStyle={{ background:'#1a1f35', border:'1px solid #2a2f45', borderRadius:'10px', fontSize:'13px' }} formatter={fmt} />
             <Legend wrapperStyle={{ fontSize:'12px' }} />
             <Line type="monotone" dataKey="Income"     stroke="#00f5a0" strokeWidth={2.5} dot={false} activeDot={{ r:5 }} />
@@ -277,147 +279,188 @@ export default function Analytics() {
         </ResponsiveContainer>
       </div>
 
-      {/* ── Insight cards ────────────────────────────────────────────────── */}
-      <div style={st.insightRow}>
-        <div style={st.insightCard}>
-          <div style={{ ...st.insightBadge, background:'#ffa50215', color:'#ffa502' }}>💼 PEAK SPEND</div>
-          <div style={st.insightMain}>{peakSpend ? fmt(peakSpend.amount) : '—'}</div>
-          <div style={st.insightSub}>
-            {peakSpend
-              ? `${peakSpend.category_name || 'Misc'} · ${new Date(peakSpend.date).toLocaleDateString('en-IN',{ month:'short', day:'numeric' })}`
-              : 'No expenses yet'}
+      {/* Insight cards */}
+      <div style={s.insightRow}>
+        <div style={s.insightCard}>
+          <div style={{ ...s.badge, background:'#ffa50215', color:'#ffa502' }}>💼 PEAK SPEND</div>
+          <div style={s.insightVal}>{peak ? fmt(peak.amount) : '—'}</div>
+          <div style={s.insightSub}>
+            {peak ? `${peak.category_name||'Misc'} · ${new Date(peak.date).toLocaleDateString('en-IN',{ month:'short', day:'numeric' })}` : 'No expenses yet'}
           </div>
         </div>
-        <div style={st.insightCard}>
-          <div style={{ ...st.insightBadge, background:'#6c5ce715', color:'#6c5ce7' }}>🏆 TOP CATEGORY</div>
-          <div style={st.insightMain}>{heavyweight ? heavyweight.name : '—'}</div>
-          <div style={st.insightSub}>{hwPct}% of total outflow</div>
+        <div style={s.insightCard}>
+          <div style={{ ...s.badge, background:'#6c5ce715', color:'#6c5ce7' }}>🏆 TOP CATEGORY</div>
+          <div style={s.insightVal}>{hw ? hw.name : '—'}</div>
+          <div style={s.insightSub}>{hwPct}% of total outflow</div>
         </div>
       </div>
 
-      {/* ── Monthly Insights card ─────────────────────────────────────────── */}
-      <div style={st.card}>
-        {/* Card header: title + month picker */}
-        <div style={st.cardTitleRow}>
-          <div style={st.cardTitle}>Monthly Insights</div>
-          <select value={month} onChange={e => setMonth(Number(e.target.value))} style={st.select}>
+      {/* Monthly Insights */}
+      <div style={s.card}>
+        <div style={s.cardHeadRow}>
+          <span style={s.cardTitle}>Monthly Insights</span>
+          <select value={month} onChange={e => setMonth(+e.target.value)} style={s.sel}>
             {MONTHS.map((m,i) => <option key={i} value={i+1}>{m}</option>)}
           </select>
         </div>
 
-        {/* ── Pie + Legend section ─────────────────────────────────────── */}
         {pieData.length === 0 ? (
-          <div style={st.emptyState}>
-            <div style={st.emptyIcon}>📊</div>
-            <div style={st.emptyText}>No expense data for {MONTHS_FULL[month-1]}</div>
-          </div>
+          <>
+            <div style={s.empty}>
+              <div style={{ fontSize:36, marginBottom:12 }}>📊</div>
+              <div style={{ fontSize:14, color:'#8892b0' }}>No expense data for {MONTHS_FULL[month-1]}</div>
+            </div>
+            <div style={{ height:1, background:'#2a2f45', margin:'16px 0' }} />
+            <Heatmap />
+          </>
         ) : (
           <>
             {/*
-              Layout strategy:
-              - Mobile:   Donut full-width stacked above single-col legend
-              - Tablet:   Donut left | legend right (2 cols)
-              - Desktop:  Donut left | legend fills remaining space (column-first, max MAX_ROWS per col)
+              ═══════════════════════════════════════════════════════════════
+              LAYOUT:
+              Mobile  (<640px): flex column → donut+legend row → heatmap
+              Desktop (≥640px): 3-column CSS grid
+                col1: donut (180px fixed)
+                col2: legend (1fr — fills available space, col-first)
+                col3: heatmap (auto — sized by content)
+              ═══════════════════════════════════════════════════════════════
             */}
-            <div style={{
-              display: 'flex',
-              flexDirection: isMobile ? 'column' : 'row',
-              gap: isMobile ? '16px' : '24px',
-              alignItems: 'flex-start',
-              marginBottom: '24px',
-            }}>
+            {isMobile ? (
+              /* ── Mobile layout ── */
+              <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
 
-              {/* Donut — size adapts to numCols on desktop */}
-              <div style={{
-                position: 'relative',
-                flexShrink: 0,
-                width: isMobile ? '100%' : `${pieSize}px`,
-                height: isMobile ? '220px' : `${pieSize}px`,
-              }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={pieData} cx="50%" cy="50%"
-                      innerRadius="52%" outerRadius="82%"
-                      paddingAngle={2} dataKey="value"
-                    >
-                      {pieData.map((e,i) => <Cell key={i} fill={e.color} stroke="transparent" />)}
-                    </Pie>
-                    <Tooltip
-                      formatter={(val, name) => [fmt(val), name]}
-                      contentStyle={{ background:'#1a1f35', border:'1px solid #2a2f45', borderRadius:'10px', fontSize:'13px' }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-                {/* Centre label */}
-                <div style={st.donutCenter}>
-                  <div style={st.donutCenterAmt}>{fmt(pieTotalVal)}</div>
-                  <div style={st.donutCenterLbl}>total spent</div>
+                {/* Row 1: donut + single-col legend side by side */}
+                <div style={{ display:'flex', gap:16, alignItems:'flex-start' }}>
+
+                  {/* Donut */}
+                  <div style={{ position:'relative', flexShrink:0, width:150, height:150 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={pieData} cx="50%" cy="50%"
+                          innerRadius="50%" outerRadius="82%"
+                          paddingAngle={2} dataKey="value">
+                          {pieData.map((e,i) => <Cell key={i} fill={e.color} stroke="transparent" />)}
+                        </Pie>
+                        <Tooltip formatter={(v,n) => [fmt(v),n]}
+                          contentStyle={{ background:'#1a1f35', border:'1px solid #2a2f45', borderRadius:'10px', fontSize:'12px' }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div style={s.donutCtr}>
+                      <div style={{ fontSize:12, fontWeight:700, color:'#fff', whiteSpace:'nowrap' }}>{fmt(pieTotalVal)}</div>
+                      <div style={{ fontSize:10, color:'#8892b0' }}>total spent</div>
+                    </div>
+                  </div>
+
+                  {/* Single-col legend */}
+                  <div style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column', gap:8 }}>
+                    {pieData.map((item,i) => {
+                      const pct = pieTotalVal > 0 ? ((item.value/pieTotalVal)*100).toFixed(1) : 0;
+                      return (
+                        <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:8 }}>
+                          <div style={{ ...s.swatch, background:item.color }} />
+                          <div style={{ minWidth:0 }}>
+                            <div style={{ fontSize:12, fontWeight:600, color:'#fff', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                              {item.icon} {item.name}
+                            </div>
+                            <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+                              <span style={{ fontSize:11, color:'#8892b0' }}>{fmt(item.value)}</span>
+                              <span style={{ fontSize:11, fontWeight:700, color:item.color }}>{pct}%</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
+
+                {/* Row 2: heatmap full width */}
+                <div style={{ height:1, background:'#2a2f45' }} />
+                <Heatmap />
               </div>
 
-              {/*
-                COLUMN-FIRST LEGEND
-                We use a CSS grid with a fixed number of rows (maxRows) and
-                grid-auto-flow: column so items fill downward first.
-                numCols is computed from pieData.length / maxRows.
-              */}
+            ) : (
+              /* ── Desktop 3-column grid ── */
               <div style={{
-                flex: 1,
-                minWidth: 0,
                 display: 'grid',
-                gridTemplateRows: `repeat(${isMobile ? pieData.length : Math.min(maxRows, pieData.length)}, auto)`,
-                gridAutoFlow: isMobile ? 'row' : 'column',
-                gridAutoColumns: isMobile ? '1fr' : '170px',
-                gap: '10px 20px',
-                alignContent: 'start',
+                // col1=donut, col2=legend fills space, col3=heatmap hugs content
+                gridTemplateColumns: '180px 1fr auto',
+                gridTemplateAreas: '"donut legend heatmap"',
+                gap: '24px',
+                alignItems: 'start',
               }}>
-                {pieData.map((item, i) => {
-                  const pct = pieTotalVal > 0 ? ((item.value / pieTotalVal) * 100).toFixed(1) : 0;
-                  return (
-                    <div key={i} style={st.legendItem}>
-                      <div style={{ ...st.legendSwatch, background: item.color }} />
-                      <div style={st.legendDetails}>
-                        <div style={{
-                          ...st.legendName,
-                          whiteSpace: isMobile ? 'normal' : 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                        }}>
-                          {item.icon} {item.name}
-                        </div>
-                        <div style={st.legendMeta}>
-                          <span style={st.legendAmt}>{fmt(item.value)}</span>
-                          <span style={{ ...st.legendPct, color: item.color }}>{pct}%</span>
+
+                {/* Col 1 — Donut */}
+                <div style={{ gridArea:'donut', position:'relative', width:180, height:180 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={pieData} cx="50%" cy="50%"
+                        innerRadius="50%" outerRadius="82%"
+                        paddingAngle={2} dataKey="value">
+                        {pieData.map((e,i) => <Cell key={i} fill={e.color} stroke="transparent" />)}
+                      </Pie>
+                      <Tooltip formatter={(v,n) => [fmt(v),n]}
+                        contentStyle={{ background:'#1a1f35', border:'1px solid #2a2f45', borderRadius:'10px', fontSize:'13px' }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div style={s.donutCtr}>
+                    <div style={{ fontSize:13, fontWeight:700, color:'#fff', whiteSpace:'nowrap' }}>{fmt(pieTotalVal)}</div>
+                    <div style={{ fontSize:10, color:'#8892b0', marginTop:2 }}>total spent</div>
+                  </div>
+                </div>
+
+                {/* Col 2 — Legend, column-first fill */}
+                <div style={{
+                  gridArea: 'legend',
+                  display: 'grid',
+                  // Fixed row count → items fill downward first, then new column auto-creates
+                  gridTemplateRows: `repeat(${numLegendRows}, auto)`,
+                  gridAutoFlow: 'column',
+                  gridAutoColumns: '165px',
+                  gap: '10px 20px',
+                  alignContent: 'start',
+                }}>
+                  {pieData.map((item,i) => {
+                    const pct = pieTotalVal > 0 ? ((item.value/pieTotalVal)*100).toFixed(1) : 0;
+                    return (
+                      <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:9, minWidth:0 }}>
+                        <div style={{ ...s.swatch, background:item.color, marginTop:3, flexShrink:0 }} />
+                        <div style={{ minWidth:0 }}>
+                          <div style={{ fontSize:13, fontWeight:500, color:'#fff', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', marginBottom:2 }}>
+                            {item.icon} {item.name}
+                          </div>
+                          <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                            <span style={{ fontSize:12, color:'#8892b0' }}>{fmt(item.value)}</span>
+                            <span style={{ fontSize:12, fontWeight:700, color:item.color }}>{pct}%</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+                    );
+                  })}
+                </div>
 
-            {/* Divider between pie section and heatmap */}
-            <div style={{ height:'1px', background:'#2a2f45', margin:'0 0 20px' }} />
+                {/* Col 3 — Heatmap (auto width = content width) */}
+                <div style={{ gridArea:'heatmap' }}>
+                  <Heatmap />
+                </div>
+
+              </div>
+            )}
           </>
         )}
-
-        {/* ── Heatmap (always shown, even if no pie data) ─────────────── */}
-        <HeatmapBlock />
       </div>
 
-      {/* ── Monthly Comparison bar chart ──────────────────────────────────── */}
-      <div style={st.card}>
-        <div style={st.cardTitleRow}>
-          <div style={st.cardTitle}>Monthly Comparison</div>
-          <div style={st.cardBadge}>bar view</div>
+      {/* Bar Chart */}
+      <div style={s.card}>
+        <div style={s.cardHeadRow}>
+          <span style={s.cardTitle}>Monthly Comparison</span>
+          <span style={s.cardBadge}>bar view</span>
         </div>
         <ResponsiveContainer width="100%" height={200}>
           <BarChart data={chartData} margin={{ top:4, right:4, left:-10, bottom:0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#2a2f4566" />
             <XAxis dataKey="name" stroke="#8892b0" fontSize={11} tickLine={false} />
             <YAxis stroke="#8892b0" fontSize={11} tickLine={false}
-              tickFormatter={v => v >= 1000 ? `₹${(v/1000).toFixed(0)}k` : `₹${v}`} />
+              tickFormatter={v => v>=1000 ? `₹${(v/1000).toFixed(0)}k` : `₹${v}`} />
             <Tooltip contentStyle={{ background:'#1a1f35', border:'1px solid #2a2f45', borderRadius:'10px', fontSize:'13px' }} formatter={fmt} />
             <Legend wrapperStyle={{ fontSize:'12px' }} />
             <Bar dataKey="Income"     fill="#00f5a0" radius={[4,4,0,0]} maxBarSize={28} />
@@ -427,18 +470,22 @@ export default function Analytics() {
         </ResponsiveContainer>
       </div>
 
-      <div style={{ height:'100px' }} />
+      <div style={{ height:100 }} />
 
-      {/* ── Hover tooltip (fixed-position) ───────────────────────────────── */}
-      {tooltip && (
+      {/* Hover tooltip */}
+      {tip && (
         <div style={{
-          ...st.heatTooltip,
-          top:  tooltip.y - 70,
-          left: Math.min(tooltip.x - 65, vw - 160),
+          position:'fixed',
+          top: tip.y - 70,
+          left: Math.min(tip.x - 65, vw - 170),
+          background:'#1a1f35', border:'1px solid #2a2f45',
+          borderRadius:8, padding:'8px 12px',
+          zIndex:9999, pointerEvents:'none',
+          boxShadow:'0 4px 20px rgba(0,0,0,0.5)',
+          minWidth:140,
         }}>
-          {tooltip.lines.map((line, i) => (
-            <div key={i} style={i === 0 ? st.heatTooltipDate : st.heatTooltipAmt}>{line}</div>
-          ))}
+          <div style={{ fontSize:12, color:'#8892b0', marginBottom:2 }}>{tip.lines[0]}</div>
+          <div style={{ fontSize:14, fontWeight:700, color:'#ff4757' }}>{tip.lines[1]}</div>
         </div>
       )}
     </div>
@@ -446,60 +493,38 @@ export default function Analytics() {
 }
 
 // ── Static styles ─────────────────────────────────────────────────────────────
-const st = {
-  page:          { padding:'20px', background:'#0a0e1a', minHeight:'100vh' },
-  loadingScreen: { display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100vh', background:'#0a0e1a', gap:'16px' },
-  loadingSpinner:{ width:'36px', height:'36px', borderRadius:'50%', border:'3px solid #2a2f45', borderTopColor:'#00f5a0', animation:'spin 0.8s linear infinite' },
-  loadingText:   { color:'#8892b0', fontSize:'14px' },
+const s = {
+  page:   { padding:'20px', background:'#0a0e1a', minHeight:'100vh' },
+  loader: { display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100vh', background:'#0a0e1a', gap:16 },
+  loaderSpinner: { width:36, height:36, borderRadius:'50%', border:'3px solid #2a2f45', borderTopColor:'#00f5a0' },
+  loaderTxt: { color:'#8892b0', fontSize:14 },
 
-  pageHeader: { display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'20px', paddingTop:'10px' },
-  pageTitle:  { fontSize:'24px', fontWeight:'700', color:'#fff' },
-  pageSub:    { fontSize:'13px', color:'#8892b0', marginTop:'2px' },
+  pageHead:  { display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:20, paddingTop:10 },
+  pageTitle: { fontSize:24, fontWeight:700, color:'#fff' },
+  pageSub:   { fontSize:13, color:'#8892b0', marginTop:2 },
 
-  card:         { background:'#1a1f35', borderRadius:'16px', padding:'20px', marginBottom:'16px', border:'1px solid #2a2f45' },
-  cardTitleRow: { display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px' },
-  cardTitle:    { fontSize:'16px', fontWeight:'700', color:'#fff' },
-  cardBadge:    { fontSize:'11px', color:'#8892b0', background:'#2a2f45', padding:'4px 10px', borderRadius:'20px' },
+  card:        { background:'#1a1f35', borderRadius:16, padding:20, marginBottom:16, border:'1px solid #2a2f45' },
+  cardHeadRow: { display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 },
+  cardTitle:   { fontSize:16, fontWeight:700, color:'#fff' },
+  cardBadge:   { fontSize:11, color:'#8892b0', background:'#2a2f45', padding:'4px 10px', borderRadius:20 },
 
-  select: { background:'#0a0e1a', border:'1px solid #2a2f45', color:'#fff', padding:'7px 12px', borderRadius:'10px', fontSize:'13px', outline:'none', cursor:'pointer' },
+  sel: { background:'#0a0e1a', border:'1px solid #2a2f45', color:'#fff', padding:'7px 12px', borderRadius:10, fontSize:13, outline:'none', cursor:'pointer' },
 
-  insightRow:   { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px', marginBottom:'16px' },
-  insightCard:  { background:'#1a1f35', borderRadius:'16px', padding:'18px 16px', border:'1px solid #2a2f45' },
-  insightBadge: { display:'inline-block', fontSize:'10px', fontWeight:'700', letterSpacing:'0.6px', padding:'4px 10px', borderRadius:'20px', marginBottom:'12px' },
-  insightMain:  { fontSize:'20px', fontWeight:'700', color:'#fff', marginBottom:'4px', lineHeight:1.2 },
-  insightSub:   { fontSize:'12px', color:'#8892b0', lineHeight:1.4 },
+  insightRow: { display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:16 },
+  insightCard:{ background:'#1a1f35', borderRadius:16, padding:'18px 16px', border:'1px solid #2a2f45' },
+  badge:      { display:'inline-block', fontSize:10, fontWeight:700, letterSpacing:'0.6px', padding:'4px 10px', borderRadius:20, marginBottom:12 },
+  insightVal: { fontSize:20, fontWeight:700, color:'#fff', marginBottom:4, lineHeight:1.2 },
+  insightSub: { fontSize:12, color:'#8892b0', lineHeight:1.4 },
 
-  emptyState: { textAlign:'center', padding:'32px 20px' },
-  emptyIcon:  { fontSize:'36px', marginBottom:'12px' },
-  emptyText:  { fontSize:'14px', color:'#8892b0' },
+  empty:    { textAlign:'center', padding:'32px 20px' },
 
-  // Donut
-  donutCenter:    { position:'absolute', top:'50%', left:'50%', transform:'translate(-50%,-50%)', textAlign:'center', pointerEvents:'none' },
-  donutCenterAmt: { fontSize:'15px', fontWeight:'700', color:'#fff', whiteSpace:'nowrap' },
-  donutCenterLbl: { fontSize:'11px', color:'#8892b0', marginTop:'2px' },
+  donutCtr: { position:'absolute', top:'50%', left:'50%', transform:'translate(-50%,-50%)', textAlign:'center', pointerEvents:'none' },
 
-  // Legend
-  legendItem:    { display:'flex', alignItems:'flex-start', gap:'10px', minWidth:0 },
-  legendSwatch:  { width:'12px', height:'12px', borderRadius:'3px', flexShrink:0, marginTop:'3px' },
-  legendDetails: { flex:1, minWidth:0 },
-  legendName:    { fontSize:'13px', color:'#fff', fontWeight:'500', marginBottom:'2px' },
-  legendMeta:    { display:'flex', gap:'8px', alignItems:'center' },
-  legendAmt:     { fontSize:'12px', color:'#8892b0' },
-  legendPct:     { fontSize:'12px', fontWeight:'700' },
+  swatch: { width:11, height:11, borderRadius:3, flexShrink:0 },
 
-  // Heatmap
-  heatTitleRow:  { display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px', flexWrap:'wrap', gap:'8px' },
-  heatTitle:     { fontSize:'13px', fontWeight:'600', color:'#8892b0' },
-  heatControls:  { display:'flex', alignItems:'center', gap:'10px' },
-  heatLegend:    { display:'flex', alignItems:'center', gap:'4px' },
-  heatLegLbl:    { fontSize:'11px', color:'#8892b0' },
-  heatLegCell:   { width:'13px', height:'13px', borderRadius:'3px' },
-
-  heatGrid:      { display:'flex', gap:'6px', alignItems:'flex-start', width:'100%' },
-  heatDayLabels: { display:'grid', gridTemplateRows:'repeat(7, 1fr)', flexShrink:0 },
-  heatDayLabel:  { fontSize:'10px', color:'#8892b0', display:'flex', alignItems:'center', paddingRight:'6px', fontWeight:'600', whiteSpace:'nowrap' },
-
-  heatTooltip:     { position:'fixed', background:'#1a1f35', border:'1px solid #2a2f45', borderRadius:'8px', padding:'8px 12px', zIndex:9999, pointerEvents:'none', boxShadow:'0 4px 20px rgba(0,0,0,0.5)', minWidth:'140px' },
-  heatTooltipDate: { fontSize:'12px', color:'#8892b0', marginBottom:'2px' },
-  heatTooltipAmt:  { fontSize:'14px', fontWeight:'700', color:'#ff4757' },
+  heatHead:   { display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10, flexWrap:'wrap', gap:8 },
+  heatTitle:  { fontSize:12, fontWeight:600, color:'#8892b0' },
+  heatLegRow: { display:'flex', alignItems:'center', gap:4 },
+  heatLegLbl: { fontSize:11, color:'#8892b0' },
+  heatLegBox: { width:13, height:13, borderRadius:3 },
 };
