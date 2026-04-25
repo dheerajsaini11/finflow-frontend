@@ -13,15 +13,10 @@ const MONTHS_FULL = ['January','February','March','April','May','June','July','A
 const WEEKDAYS_MON = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 const WEEKDAYS_SUN = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-const CELL  = 28;  // px — fixed desktop heat-cell size
+const CELL  = 34;  // px — desktop heat-cell size (wider than before)
 const GAP   =  4;  // px — gap between cells
 const MAX_LEGEND_ROWS = 5;
-
-// Heatmap desktop width = day-label col + gap + 7 cols of cells
-// April has 5 weeks = 5 columns → max cols = 6 (blanks + 5 full weeks)
-// We allow up to 6 columns: 6*CELL + 5*GAP = 168+20=188, +label(38)+gap(6) = 232
-// Use 240px as the fixed heatmap area width on desktop so it never expands
-const HEAT_LABEL_W = 38;
+const HEAT_LABEL_W = 32; // px — day-label column (Mon/Tue/etc.)
 
 const getHeatColor = (val, max) => {
   if (!val) return '#1e2440';
@@ -134,30 +129,20 @@ export default function Analytics() {
   //   Each legend column is ~170px wide; use auto-fill so it decides naturally.
   const numLegendRows = Math.min(MAX_LEGEND_ROWS, pieData.length);
 
-  // ── Mobile heat-cell size: fill full card width ───────────────────────────
-  const cardPad    = 20;  // card padding (each side)
-  const availW     = vw - cardPad * 2 - 2; // card content width
-  // label col + gap + 7 cells + 6 inter-cell gaps = HEAT_LABEL_W+6 + 7*cell + 6*4
-  // cell = (availW - HEAT_LABEL_W - 6 - 24) / 7
-  const mobileCellPx = Math.max(30, Math.min(44, Math.floor((availW - HEAT_LABEL_W - 6 - 24) / 7)));
-  const cellPx = isMobile ? mobileCellPx : CELL;
+  // Mobile heat-cell: fill full card width
+  // availW = vw - 2*cardPad; cell = (availW - labelW - labelGap - 6*cellGap) / 7
+  const cardPad       = 20;
+  const availW        = vw - cardPad * 2 - 2;
+  const mobileCellPx  = Math.max(32, Math.min(46, Math.floor((availW - HEAT_LABEL_W - 6 - 24) / 7)));
+  const cellPx        = isMobile ? mobileCellPx : CELL;
 
-  if (loading) return (
-    <div style={s.loader}>
-      <div style={s.loaderSpinner} />
-      <span style={s.loaderTxt}>Loading analytics...</span>
-    </div>
-  );
-
-  // ── Heatmap (reusable, width adapts) ─────────────────────────────────────
-  const Heatmap = () => (
+  // Heatmap rendered inline (NOT as a const component — avoids remount bug)
+  const renderHeatmap = () => (
     <div>
-      {/* Title row */}
       <div style={s.heatHead}>
         <span style={s.heatTitle}>
           Spending Intensity — {MONTHS_FULL[month-1]} {year}
         </span>
-        {/* Legend: Less ░░▒▓█ More */}
         <div style={s.heatLegRow}>
           <span style={s.heatLegLbl}>Less</span>
           {['#1e2440','#ffd0d4','#ff9fa8','#ff6b7a','#ff4757','#ff2d3b'].map((c,i) => (
@@ -167,10 +152,8 @@ export default function Analytics() {
         </div>
       </div>
 
-      {/* Day-labels + cell grid side by side */}
       <div style={{ display:'flex', gap:'6px', alignItems:'flex-start' }}>
-
-        {/* Day labels — MUST match cell height + gap pixel-perfect */}
+        {/* Day labels — gridTemplateRows must exactly match cell grid */}
         <div style={{
           display: 'grid',
           gridTemplateRows: `repeat(7, ${cellPx}px)`,
@@ -191,19 +174,18 @@ export default function Analytics() {
           ))}
         </div>
 
-        {/* Cells — column-first (fills Mon→Sun, then next week column) */}
+        {/* Cells — column-first */}
         <div style={{
           display: 'grid',
           gridTemplateRows: `repeat(7, ${cellPx}px)`,
           gridAutoFlow: 'column',
           gridAutoColumns: `${cellPx}px`,
           gap: `${GAP}px`,
-          // On mobile: allow horizontal scroll if month has 6 week-columns
           overflowX: isMobile ? 'auto' : 'visible',
         }}>
           {cells.map((dayStr, i) => {
             if (!dayStr) return (
-              <div key={i} style={{ width: cellPx, height: cellPx, borderRadius: 5 }} />
+              <div key={i} style={{ width:cellPx, height:cellPx, borderRadius:5 }} />
             );
             const spend   = heatMap[dayStr];
             const dayNum  = parseInt(dayStr.split('-')[2]);
@@ -212,8 +194,7 @@ export default function Analytics() {
               <div
                 key={i}
                 style={{
-                  width: cellPx, height: cellPx,
-                  borderRadius: 5,
+                  width: cellPx, height: cellPx, borderRadius: 5,
                   background: getHeatColor(spend, maxHeat),
                   border: isToday ? '2px solid #00f5a0' : '1px solid rgba(255,255,255,0.05)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -225,8 +206,8 @@ export default function Analytics() {
                   const lbl = new Date(dayStr).toLocaleDateString('en-IN',{
                     weekday:'short', day:'numeric', month:'short',
                   });
-                  setTip({ x: e.clientX, y: e.clientY,
-                    lines: [lbl, spend ? fmt(spend) : 'No spending'] });
+                  setTip({ x:e.clientX, y:e.clientY,
+                    lines:[lbl, spend ? fmt(spend) : 'No spending'] });
                 }}
                 onMouseLeave={() => setTip(null)}
               >
@@ -243,6 +224,16 @@ export default function Analytics() {
       </div>
     </div>
   );
+
+  if (loading) return (
+    <div style={s.loader}>
+      <div style={s.loaderSpinner} />
+      <span style={s.loaderTxt}>Loading analytics...</span>
+    </div>
+  );
+  );
+
+
 
   return (
     <div style={s.page}>
@@ -311,7 +302,7 @@ export default function Analytics() {
               <div style={{ fontSize:14, color:'#8892b0' }}>No expense data for {MONTHS_FULL[month-1]}</div>
             </div>
             <div style={{ height:1, background:'#2a2f45', margin:'16px 0' }} />
-            <Heatmap />
+            { renderHeatmap() }
           </>
         ) : (
           <>
@@ -375,18 +366,19 @@ export default function Analytics() {
 
                 {/* Row 2: heatmap full width */}
                 <div style={{ height:1, background:'#2a2f45' }} />
-                <Heatmap />
+                { renderHeatmap() }
               </div>
 
             ) : (
               /* ── Desktop 3-column grid ── */
               <div style={{
                 display: 'grid',
-                // col1=donut, col2=legend fills space, col3=heatmap hugs content
-                gridTemplateColumns: '180px 1fr auto',
+                // auto auto auto: each col hugs its content — no blank space
+                gridTemplateColumns: '180px auto auto',
                 gridTemplateAreas: '"donut legend heatmap"',
                 gap: '24px',
                 alignItems: 'start',
+                justifyContent: 'start',
               }}>
 
                 {/* Col 1 — Donut */}
@@ -440,7 +432,7 @@ export default function Analytics() {
 
                 {/* Col 3 — Heatmap (auto width = content width) */}
                 <div style={{ gridArea:'heatmap' }}>
-                  <Heatmap />
+                  { renderHeatmap() }
                 </div>
 
               </div>
