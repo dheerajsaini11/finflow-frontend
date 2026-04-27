@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getYearlyAnalytics, getTransactions } from '../services/api';
 import toast from 'react-hot-toast';
 import {
@@ -16,6 +16,13 @@ export default function Analytics() {
   const [year, setYear] = useState(new Date().getFullYear());
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [loading, setLoading] = useState(true);
+  const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsDesktop(window.innerWidth >= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     fetchAnalytics();
@@ -195,24 +202,24 @@ export default function Analytics() {
         </div>
 
         <div style={styles.mergedCardContent}>
+
           {/* Left/Top: Pie Chart */}
-          <div style={styles.pieSection}>
+          <div style={isDesktop ? styles.pieSectionDesktop : styles.pieSection}>
             {pieData.length === 0 ? (
               <div style={styles.empty}>No expense data for this month</div>
             ) : (
               <>
-                <div style={styles.pieWrapper}>
-                  <ResponsiveContainer width="100%" height={220}>
+                <div style={isDesktop ? styles.pieWrapperDesktop : styles.pieWrapper}>
+                  <ResponsiveContainer width="100%" height={isDesktop ? 320 : 220}>
                     <PieChart>
-                      {/* Using percentages for responsive scaling */}
-                      <Pie data={pieData} cx="50%" cy="50%" innerRadius="55%" outerRadius="80%" dataKey="value">
+                      <Pie data={pieData} cx="50%" cy="50%" innerRadius="50%" outerRadius="78%" dataKey="value">
                         {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                       </Pie>
                       <Tooltip formatter={(val) => formatAmount(val)} contentStyle={{ background: '#1a1f35', border: '1px solid #2a2f45', borderRadius: '8px' }} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-                <div style={styles.legend}>
+                <div style={isDesktop ? styles.legendDesktop : styles.legend}>
                   {pieData.map((item, i) => {
                     const total = pieData.reduce((s, p) => s + p.value, 0);
                     const pct = total > 0 ? ((item.value / total) * 100).toFixed(1) : 0;
@@ -311,14 +318,21 @@ const styles = {
   empty: { color: '#8892b0', textAlign: 'center', padding: '20px', width: '100%' },
   
   // --- Merged Card Layout Styles ---
-  mergedCardContent: { display: 'flex', flexWrap: 'wrap', gap: '40px', alignItems: 'center' },
+  mergedCardContent: { display: 'flex', flexWrap: 'wrap', gap: '40px', alignItems: 'flex-start' },
   
-  // Added flexWrap and gap to allow legend to drop below on mobile
+  // Mobile pie section
   pieSection: { flex: 1, minWidth: '280px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: '20px' },
-  pieWrapper: { flex: '1 1 200px', maxWidth: '300px', width: '100%' }, 
-  
-  // Added minWidth to force wrap on tiny screens
+  pieWrapper: { flex: '1 1 200px', maxWidth: '300px', width: '100%' },
+
+  // Desktop pie section — vertical, centered, large
+  pieSectionDesktop: { flex: 1, minWidth: '280px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '20px' },
+  pieWrapperDesktop: { width: '100%', maxWidth: '380px' },
+
+  // Mobile legend
   legend: { flex: '1 1 150px', minWidth: '150px', display: 'flex', flexDirection: 'column', gap: '8px' },
+
+  // Desktop legend — 2-column grid below pie
+  legendDesktop: { width: '100%', maxWidth: '380px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 24px' },
   legendItem: { display: 'flex', alignItems: 'center', gap: '8px' },
   legendDot: { width: '10px', height: '10px', borderRadius: '50%', flexShrink: 0 },
   legendName: { fontSize: '12px', color: '#fff', flex: 1 },
