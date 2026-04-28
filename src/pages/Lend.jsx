@@ -67,17 +67,22 @@ export default function Lend() {
       toast.error('Please select a date');
       return;
     }
+
+    // Determine direction: if balance < 0, you owe them → use 'borrow_return'
+    // If balance > 0, they owe you → use 'return'
+    const personBalance = balances.find(b => b.person_name === personName);
+    const txType = personBalance && Number(personBalance.balance) < 0 ? 'borrow_return' : 'return';
     
     try {
       await addTransaction({
-        type: 'return',
+        type: txType,
         amount: Number(returnAmount),
         person_name: personName,
         date: returnDate,
         note: 'Partial Return'
       });
       
-      toast.success(`Logged ₹${returnAmount} return from ${personName}`);
+      toast.success(`Logged ₹${returnAmount} partial return for ${personName}`);
       setReturnAmount('');
       setReturnDate(new Date().toISOString().split('T')[0]);
       setReturnMode(null);
@@ -199,11 +204,14 @@ export default function Lend() {
               <div key={j} style={styles.txRow}>
                 <div style={{
                   ...styles.txDot,
-                  background: tx.type === 'lend' ? '#ffa502' : (tx.type === 'borrow' ? '#ff4757' : '#00f5a0'),
+                  background: tx.type === 'lend' ? '#ffa502' : tx.type === 'borrow' ? '#ff4757' : '#00f5a0',
                 }} />
                 <div style={styles.txInfo}>
                   <div style={styles.txType}>
-                    {tx.type === 'lend' ? 'Lent' : (tx.type === 'borrow' ? 'Borrowed' : 'Returned')}
+                    {tx.type === 'lend' ? 'Lent'
+                      : tx.type === 'borrow' ? 'Borrowed'
+                      : tx.type === 'borrow_return' ? 'You Returned'
+                      : 'Returned'}
                   </div>
                   <div style={styles.txDate}>
                     {new Date(tx.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
@@ -211,7 +219,7 @@ export default function Lend() {
                 </div>
                 <div style={{
                   ...styles.txAmount,
-                  color: tx.type === 'lend' ? '#ffa502' : (tx.type === 'borrow' ? '#ff4757' : '#00f5a0'),
+                  color: tx.type === 'lend' ? '#ffa502' : tx.type === 'borrow' ? '#ff4757' : '#00f5a0',
                 }}>
                   {(tx.type === 'lend' || tx.type === 'borrow') ? '+' : '-'}{formatAmount(tx.amount)}
                 </div>
