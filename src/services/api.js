@@ -53,5 +53,11 @@ export const getBudgetSummary = (params) => API.get('/budget/summary', { params 
 export const setBudget = (data) => API.post('/budget', data);
 export const deleteBudget = (id) => API.delete(`/budget/${id}`);
 
+// Import
+export const analyzeImport = (data) => API.post('/import/analyze', data, {
+  headers: { 'Content-Type': 'multipart/form-data' }
+});
+export const confirmImport = (data) => API.post('/import/confirm', data);
+
 // Streak
 export const getStreak = () => API.get('/dashboard/streak');

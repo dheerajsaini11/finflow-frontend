@@ -14,13 +14,12 @@ import QuickEntry from './pages/QuickEntry';
 import Profile from './pages/Profile';
 import ExportCenter from './pages/ExportCenter';
 import Navbar from './components/Navbar';
-import Header from './components/Header';
 import ManageCategories from './pages/ManageCategories';
+import ImportCenter from './pages/ImportCenter';
 import './App.css';
 
 const AppLayout = ({ children }) => (
   <div style={{ paddingBottom: '70px', minHeight: '100vh', background: '#0a0e1a' }}>
-    <Header />
     {children}
     <Navbar />
   </div>
@@ -53,6 +52,7 @@ function App() {
           <Route path="/profile" element={<PrivateRoute><AppLayout><Profile /></AppLayout></PrivateRoute>} />
           <Route path="/export" element={<PrivateRoute><AppLayout><ExportCenter /></AppLayout></PrivateRoute>} />
           <Route path="/categories" element={<PrivateRoute><AppLayout><ManageCategories /></AppLayout></PrivateRoute>} />
+          <Route path="/import" element={<PrivateRoute><AppLayout><ImportCenter /></AppLayout></PrivateRoute>} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </BrowserRouter>
