@@ -115,7 +115,16 @@ export default function Header() {
           <button onClick={() => setIsDrawerOpen(false)} style={styles.closeBtn}>✕</button>
         </div>
         <div style={styles.drawerMenu}>
-          
+
+          <div 
+            onClick={() => handleNavigate('/')} 
+            style={getMenuItemStyle('/')}
+            onMouseEnter={() => setHoveredItem('/')}
+            onMouseLeave={() => setHoveredItem(null)}
+          >
+            <span style={styles.menuIcon}>🏠</span> Home
+          </div>
+
           <div 
             onClick={() => handleNavigate('/budget')} 
             style={getMenuItemStyle('/budget')}
@@ -217,7 +226,7 @@ export default function Header() {
 }
 
 const styles = {
-  topBar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', paddingTop: '10px' },
+  topBar: { position: 'sticky', top: 0, zIndex: 100, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', background: '#0a0e1a', borderBottom: '1px solid #2a2f45' },
   leftSection: { display: 'flex', alignItems: 'center', gap: '16px' },
   iconBtn: { background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' },
   greeting: { fontSize: '13px', color: '#8892b0', marginBottom: '2px' },
@@ -232,7 +241,7 @@ const styles = {
   drawerMenu: { padding: '8px 0', overflowY: 'auto' },
   menuIcon: { fontSize: '18px' },
   divider: { height: '1px', background: '#2a2f45', margin: '16px 20px' },
-  profileDropdown: { position: 'absolute', top: '75px', right: '20px', background: '#1a1f35', borderRadius: '16px', width: '320px', border: '1px solid #2a2f45', zIndex: 1000, padding: '16px', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' },
+  profileDropdown: { position: 'fixed', top: '75px', right: '20px', background: '#1a1f35', borderRadius: '16px', width: '320px', border: '1px solid #2a2f45', zIndex: 1000, padding: '16px', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' },
   profileHeaderRow: { display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' },
   profileUploadWrapper: { position: 'relative', cursor: 'pointer' },
   profileAvatarLarge: { width: '56px', height: '56px', borderRadius: '50%', background: 'linear-gradient(135deg, #00f5a0, #0066ff)', color: '#0a0e1a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '24px', objectFit: 'cover' },
