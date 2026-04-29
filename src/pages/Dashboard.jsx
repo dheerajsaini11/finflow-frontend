@@ -3,7 +3,6 @@ import { useAuth } from '../context/AuthContext';
 import { getDashboard } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import Header from '../components/Header'; // Ensure this path is correct based on your folder structure
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -58,9 +57,6 @@ export default function Dashboard() {
 
   return (
     <div style={styles.container}>
-
-      {/* --- USE THE EXTERNAL HEADER COMPONENT --- */}
-      <Header />
 
       {/* Summary Cards */}
       <div style={styles.cardsRow}>
