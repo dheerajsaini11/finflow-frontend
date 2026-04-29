@@ -14,11 +14,13 @@ import QuickEntry from './pages/QuickEntry';
 import Profile from './pages/Profile';
 import ExportCenter from './pages/ExportCenter';
 import Navbar from './components/Navbar';
+import Header from './components/Header';
 import ManageCategories from './pages/ManageCategories';
 import './App.css';
 
 const AppLayout = ({ children }) => (
   <div style={{ paddingBottom: '70px', minHeight: '100vh', background: '#0a0e1a' }}>
+    <Header />
     {children}
     <Navbar />
   </div>
