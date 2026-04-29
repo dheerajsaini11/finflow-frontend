@@ -9,6 +9,7 @@ const TYPE_COLORS = {
   lend: '#ffa502',
   borrow: '#ff4757', // Added borrow color
   return: '#00f5a0',
+  borrow_return: '#00f5a0',
 };
 
 const TYPE_ICONS = {
@@ -18,6 +19,17 @@ const TYPE_ICONS = {
   lend: '🤝',
   borrow: '↙️',     // Added borrow icon
   return: '↩️',
+  borrow_return: '✅',
+};
+
+const TYPE_LABELS = {
+  expense: null,
+  income: null,
+  investment: null,
+  lend: 'Lent Money',
+  borrow: 'Borrowed',
+  return: 'Received Back',
+  borrow_return: 'Repaid',
 };
 
 export default function Transactions() {
@@ -315,14 +327,14 @@ export default function Transactions() {
                 <div style={styles.txInfo}>
                   <div style={styles.txName}>
                     {/* Capitalized fallback type */}
-                    {tx.category_name || tx.person_name || capitalize(tx.type)}
+                    {TYPE_LABELS[tx.type] || tx.category_name || tx.person_name || capitalize(tx.type)}
                   </div>
                   {tx.note && (
                     <div style={styles.txNote}>{tx.note}</div>
                   )}
                   <div style={styles.txMeta}>
                     {/* Capitalized Meta Type */}
-                    {formatDate(tx.date)} • {capitalize(tx.type)}
+                    {formatDate(tx.date)} • {TYPE_LABELS[tx.type] || capitalize(tx.type)}
                   </div>
                 </div>
                 <div style={styles.txRight}>
@@ -330,7 +342,7 @@ export default function Transactions() {
                     ...styles.txAmount,
                     color: TYPE_COLORS[tx.type] || '#fff',
                   }}>
-                    {tx.type === 'income' || tx.type === 'return' ? '+' : '-'}
+                    {(tx.type === 'income' || tx.type === 'return' || tx.type === 'borrow_return') ? '+' : '-'}
                     {formatAmount(tx.amount)}
                   </div>
                   <div style={styles.actionBtns}>
