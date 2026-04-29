@@ -179,32 +179,65 @@ export default function Dashboard() {
           <div style={styles.empty}>No transactions yet. Add your first one! 💰</div>
         )}
 
-        {data?.recentTransactions?.map(tx => (
-          <div key={tx.id} style={styles.txRow}>
-            <div style={{
-              ...styles.txIcon,
-              background: tx.category_color + '22',
-            }}>
-              {tx.category_icon || '💳'}
-            </div>
-            <div style={styles.txInfo}>
-              <div style={styles.txName}>{tx.category_name || tx.type}</div>
-              <div style={styles.txDate}>
-                {new Date(tx.date).toLocaleDateString('en-IN', {
-                  day: 'numeric', month: 'short'
-                })}
-                {tx.note ? ` • ${tx.note}` : ''}
+        {data?.recentTransactions?.map(tx => {
+          // Human-readable labels for all transaction types
+          const typeLabel = {
+            expense: null,        // use category_name
+            income: null,         // use category_name
+            investment: null,     // use category_name
+            lend: 'Lent Money',
+            borrow: 'Borrowed',
+            return: 'Received Back',
+            borrow_return: 'Repaid',
+          };
+          const typeIcon = {
+            lend: '🤝',
+            borrow: '💸',
+            return: '↩️',
+            borrow_return: '✅',
+          };
+          const typeColor = {
+            income: '#00f5a0',
+            investment: '#6c5ce7',
+            lend: '#ffa502',
+            borrow: '#ff4757',
+            return: '#00f5a0',
+            borrow_return: '#00f5a0',
+            expense: '#ff4757',
+          };
+          const typeBg = {
+            lend: '#ffa50222',
+            borrow: '#ff475722',
+            return: '#00f5a022',
+            borrow_return: '#00f5a022',
+          };
+
+          const displayName = typeLabel[tx.type] || tx.category_name || tx.type;
+          const displayIcon = typeIcon[tx.type] || tx.category_icon || '💳';
+          const iconBg = typeBg[tx.type] || (tx.category_color ? tx.category_color + '22' : '#2a2f4522');
+          const amountColor = typeColor[tx.type] || '#ff4757';
+          const amountPrefix = (tx.type === 'income' || tx.type === 'return' || tx.type === 'borrow_return') ? '+' : '-';
+
+          return (
+            <div key={tx.id} style={styles.txRow}>
+              <div style={{ ...styles.txIcon, background: iconBg }}>
+                {displayIcon}
+              </div>
+              <div style={styles.txInfo}>
+                <div style={styles.txName}>{displayName}</div>
+                <div style={styles.txDate}>
+                  {new Date(tx.date).toLocaleDateString('en-IN', {
+                    day: 'numeric', month: 'short'
+                  })}
+                  {tx.person_name ? ` • ${tx.person_name}` : (tx.note ? ` • ${tx.note}` : '')}
+                </div>
+              </div>
+              <div style={{ ...styles.txAmount, color: amountColor }}>
+                {amountPrefix}{formatAmount(tx.amount)}
               </div>
             </div>
-            <div style={{
-              ...styles.txAmount,
-              color: tx.type === 'income' ? '#00f5a0' :
-                tx.type === 'investment' ? '#6c5ce7' : '#ff4757'
-            }}>
-              {tx.type === 'income' ? '+' : '-'}{formatAmount(tx.amount)}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Who Owes Me */}
