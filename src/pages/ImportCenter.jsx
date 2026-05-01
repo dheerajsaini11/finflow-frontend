@@ -65,7 +65,17 @@ export default function ImportCenter() {
           type = raw >= 0 ? 'income' : 'expense';
         }
 
-        const date = parseDate(row[mapping.date_column] || '');
+        // Handle split date columns (e.g. Year, Month, Day)
+        let rawDate = '';
+        if (mapping.date_column) {
+          rawDate = row[mapping.date_column] || '';
+        } else if (mapping.date_parts) {
+          const y = row[mapping.date_parts.year] || '';
+          const m = row[mapping.date_parts.month] || '';
+          const d = row[mapping.date_parts.day] || '';
+          rawDate = `${d} ${m} ${y}`;
+        }
+        const date = parseDate(rawDate);
         const description = row[mapping.description_column] || '';
 
         // Auto-match category by description keyword
